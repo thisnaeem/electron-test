@@ -53,7 +53,7 @@ function App(): React.JSX.Element {
       <img alt="logo" className="logo" src={electronLogo} />
       <div className="creator">Version 1.0.1</div>
       <div className="text">
-        Build an Electron app with <span className="react">React</span>
+        Hello Naeem <span className="react">React</span>
         &nbsp;and <span className="ts">TypeScript</span>
       </div>
       <p className="tip">
