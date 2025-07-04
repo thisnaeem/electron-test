@@ -41,6 +41,6 @@ npmRebuild: false
 publish:
   provider: github
   owner: thisnaeem
-  repo: electron-updater
+  repo: electron-test
   private: false
   releaseType: release
