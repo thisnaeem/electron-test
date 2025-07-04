@@ -11,6 +11,7 @@ export function getAutoUpdater(): AppUpdater {
 
 // Configure auto-updater
 const autoUpdater = getAutoUpdater()
+let mainWindow: BrowserWindow | null = null
 
 // Enable logging for debugging
 if (is.dev) {
@@ -24,10 +25,17 @@ if (is.dev) {
 // Auto-updater event handlers
 autoUpdater.on('checking-for-update', () => {
   console.log('Checking for update...')
+  mainWindow?.webContents.send('update-status', { status: 'checking' })
 })
 
 autoUpdater.on('update-available', (info) => {
   console.log('Update available:', info)
+  mainWindow?.webContents.send('update-status', {
+    status: 'available',
+    version: info.version,
+    releaseNotes: info.releaseNotes
+  })
+
   dialog.showMessageBox({
     type: 'info',
     title: 'Update Available',
@@ -38,19 +46,41 @@ autoUpdater.on('update-available', (info) => {
 
 autoUpdater.on('update-not-available', (info) => {
   console.log('Update not available:', info)
+  mainWindow?.webContents.send('update-status', {
+    status: 'not-available',
+    currentVersion: app.getVersion()
+  })
 })
 
 autoUpdater.on('error', (err) => {
   console.error('Auto-updater error:', err)
+  mainWindow?.webContents.send('update-status', {
+    status: 'error',
+    error: err.message
+  })
+
   dialog.showErrorBox('Update Error', `Error: ${err.message}`)
 })
 
 autoUpdater.on('download-progress', (progressObj) => {
   console.log('Download progress:', progressObj)
+  mainWindow?.webContents.send('update-status', {
+    status: 'downloading',
+    percent: progressObj.percent,
+    bytesPerSecond: progressObj.bytesPerSecond,
+    transferred: progressObj.transferred,
+    total: progressObj.total
+  })
 })
 
 autoUpdater.on('update-downloaded', (info) => {
   console.log('Update downloaded:', info)
+  mainWindow?.webContents.send('update-status', {
+    status: 'downloaded',
+    version: info.version,
+    releaseNotes: info.releaseNotes
+  })
+
   dialog
     .showMessageBox({
       type: 'info',
@@ -67,7 +97,7 @@ autoUpdater.on('update-downloaded', (info) => {
 
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
@@ -80,7 +110,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -127,13 +157,15 @@ app.whenReady().then(() => {
     autoUpdater.quitAndInstall()
   })
 
+  ipcMain.handle('get-app-version', () => {
+    return app.getVersion()
+  })
+
   createWindow()
 
   // Check for updates on app start (with a small delay to ensure window is ready)
   setTimeout(() => {
-    if (!is.dev) {
-      autoUpdater.checkForUpdatesAndNotify()
-    }
+    autoUpdater.checkForUpdatesAndNotify()
   }, 3000)
 
   app.on('activate', function () {
