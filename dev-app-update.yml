@@ -1,0 +1,6 @@
+provider: github
+owner: fabwaseem
+repo: electron-updater
+private: false
+releaseType: release
+updaterCacheDirName: electron-app-updater
