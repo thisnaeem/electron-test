@@ -44,3 +44,4 @@ publish:
   repo: electron-test
   private: false
   releaseType: release
+icon: resources/ChatGPT Image Jun 29, 2025, 02_45_50 AM.png

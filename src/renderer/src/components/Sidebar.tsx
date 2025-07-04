@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom'
+import logo from '../assets/app-logo.png'
 
 interface SidebarProps {
   collapsed: boolean
@@ -20,7 +21,10 @@ const Sidebar = ({ collapsed, toggleSidebar }: SidebarProps): React.JSX.Element 
     >
       <div className="flex items-center justify-between h-16 px-4 border-b border-gray-200 dark:border-gray-700">
         {!collapsed && (
-          <h1 className="text-xl font-bold text-gray-800 dark:text-white">Image Metadata</h1>
+          <div className="flex items-center gap-2">
+            <img src={logo} alt="App Logo" className="h-8 w-8 rounded" />
+            <h1 className="text-xl font-bold text-gray-800 dark:text-white">Image Metadata</h1>
+          </div>
         )}
         <button
           onClick={toggleSidebar}

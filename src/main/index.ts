@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import icon from '../../resources/ChatGPT Image Jun 29, 2025, 02_45_50 AM.png?asset'
 import electronUpdater, { type AppUpdater } from 'electron-updater'
 
 export function getAutoUpdater(): AppUpdater {
