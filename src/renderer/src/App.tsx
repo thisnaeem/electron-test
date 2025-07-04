@@ -49,53 +49,81 @@ function App(): React.JSX.Element {
   }
 
   return (
-    <>
-      <img alt="logo" className="logo" src={electronLogo} />
-      <div className="creator">Version 1.0.1</div>
-      <div className="text">
-        Hello Naeem <span className="react">React</span>
-        &nbsp;and <span className="ts">TypeScript</span>
-      </div>
-      <p className="tip">
-        Please try pressing <code>F12</code> to open the devTool
-      </p>
-
-      {/* Auto-update controls */}
-      <div className="update-section">
-        <h3>Auto-Update Controls</h3>
-        <div className="update-actions">
-          <button onClick={checkForUpdates} disabled={isChecking} className="update-button">
-            {isChecking ? 'Checking...' : 'Check for Updates'}
-          </button>
-          <button onClick={downloadUpdate} className="update-button">
-            Download Update
-          </button>
-          <button onClick={quitAndInstall} className="update-button">
-            Install & Restart
-          </button>
-        </div>
-        {updateStatus && (
-          <div className="update-status">
-            <p>{updateStatus}</p>
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-4">
+      <div className="max-w-md w-full bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="p-8">
+          <div className="flex justify-center mb-6">
+            <img
+              src={electronLogo}
+              alt="Electron Logo"
+              className="h-24 w-24"
+            />
           </div>
-        )}
+
+          <div className="text-center">
+            <p className="text-sm font-medium text-blue-600">Version 1.0.1</p>
+            <h1 className="mt-2 text-3xl font-bold text-gray-900">
+              Electron with <span className="text-blue-600">Tailwind CSS</span>
+            </h1>
+            <p className="mt-2 text-gray-600">
+              A modern desktop application with React, TypeScript, and Tailwind CSS
+            </p>
+          </div>
+
+          <div className="mt-8">
+            <h2 className="text-xl font-bold text-gray-900">Auto-Update Controls</h2>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={checkForUpdates}
+                disabled={isChecking}
+                className="px-4 py-2 bg-blue-600 text-white font-medium rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isChecking ? 'Checking...' : 'Check for Updates'}
+              </button>
+              <button
+                onClick={downloadUpdate}
+                className="px-4 py-2 bg-green-600 text-white font-medium rounded hover:bg-green-700"
+              >
+                Download Update
+              </button>
+              <button
+                onClick={quitAndInstall}
+                className="px-4 py-2 bg-purple-600 text-white font-medium rounded hover:bg-purple-700"
+              >
+                Install & Restart
+              </button>
+            </div>
+
+            {updateStatus && (
+              <div className="mt-4 p-3 bg-blue-50 border-l-4 border-blue-500 text-blue-700">
+                {updateStatus}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-8 flex justify-center space-x-4">
+            <a
+              href="https://electron-vite.org/"
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded hover:bg-gray-300"
+            >
+              Documentation
+            </a>
+            <button
+              onClick={ipcHandle}
+              className="px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded hover:bg-gray-300"
+            >
+              Send IPC
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div className="actions">
-        <div className="action">
-          <a href="https://electron-vite.org/" target="_blank" rel="noreferrer">
-            Documentation
-          </a>
-        </div>
-        <div className="action">
-          <a target="_blank" rel="noreferrer" onClick={ipcHandle}>
-            Send IPC
-          </a>
-        </div>
-      </div>
-      <Versions></Versions>
-    </>
+      <Versions />
+    </div>
   )
 }
 
 export default App
+
