@@ -18,7 +18,10 @@ const api = {
   },
 
   // Get app version
-  getAppVersion: () => ipcRenderer.invoke('get-app-version')
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // Open external links
+  openExternalLink: (url: string) => ipcRenderer.send('open-external-link', url)
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

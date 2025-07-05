@@ -1,6 +1,6 @@
 {
   "name": "electron-app",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -28,8 +28,10 @@
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
+    "@google/generative-ai": "^0.24.1",
     "electron-log": "^5.1.2",
     "electron-updater": "^6.3.9",
+    "react-dropzone": "^14.3.8",
     "react-router-dom": "^7.6.3"
   },
   "devDependencies": {

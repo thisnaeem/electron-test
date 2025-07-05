@@ -1,140 +1,81 @@
-import { useState, useRef, ChangeEvent, DragEvent } from 'react'
+import { useCallback } from 'react'
+import { useDropzone } from 'react-dropzone'
+import uploadIcon from '../assets/icons/image-upload-stroke-rounded.svg'
 
 interface ImageUploaderProps {
-  onImageUpload: (file: File) => void
-  isLoading?: boolean
+  onFilesAccepted: (files: File[]) => void
+  isProcessing: boolean
+  onExport: () => void
+  onClear: () => void
 }
 
-const ImageUploader = ({ onImageUpload, isLoading = false }: ImageUploaderProps): React.JSX.Element => {
-  const [isDragging, setIsDragging] = useState<boolean>(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+const MAX_FILE_SIZE = 4 * 1024 * 1024 // 4MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
-  const handleDragEnter = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(true)
-  }
+const ImageUploader = ({ onFilesAccepted, isProcessing, onExport, onClear }: ImageUploaderProps): React.JSX.Element => {
+  const onDrop = useCallback((acceptedFiles: File[]) => {
+    const validFiles = acceptedFiles.filter(file =>
+      file.size <= MAX_FILE_SIZE && ALLOWED_TYPES.includes(file.type)
+    )
 
-  const handleDragLeave = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-  }
-
-  const handleDragOver = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault()
-    e.stopPropagation()
-  }
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
-
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0]
-      processFile(file)
+    if (validFiles.length > 0) {
+      onFilesAccepted(validFiles)
     }
-  }
+  }, [onFilesAccepted])
 
-  const handleFileChange = (e: ChangeEvent<HTMLInputElement>): void => {
-    if (e.target.files && e.target.files.length > 0) {
-      const file = e.target.files[0]
-      processFile(file)
-    }
-  }
-
-  const processFile = (file: File): void => {
-    // Check if file is an image
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file')
-      return
-    }
-
-    // Create preview URL
-    const url = URL.createObjectURL(file)
-    setPreviewUrl(url)
-
-    // Pass the file to parent component
-    onImageUpload(file)
-  }
-
-  const triggerFileInput = (): void => {
-    fileInputRef.current?.click()
-  }
-
-  const clearImage = (): void => {
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl)
-    }
-    setPreviewUrl(null)
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''
-    }
-  }
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/gif': ['.gif'],
+      'image/webp': ['.webp']
+    },
+    disabled: isProcessing
+  })
 
   return (
-    <div className="w-full">
-      <input
-        type="file"
-        ref={fileInputRef}
-        onChange={handleFileChange}
-        accept="image/*"
-        className="hidden"
-      />
-
-      {!previewUrl ? (
-        <div
-          className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-            isDragging
-              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-              : 'border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500'
-          }`}
-          onClick={triggerFileInput}
-          onDragEnter={handleDragEnter}
-          onDragLeave={handleDragLeave}
-          onDragOver={handleDragOver}
-          onDrop={handleDrop}
-        >
-          <div className="flex flex-col items-center justify-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400 dark:text-gray-500 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <p className="text-lg font-medium text-gray-700 dark:text-gray-300">
-              Drag and drop an image here
-            </p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-              or click to browse
-            </p>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-4">
-              Supported formats: JPG, PNG, GIF, WEBP
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700">
+    <div className="flex flex-col gap-4">
+      <div
+        {...getRootProps()}
+        className={`
+          border-2 border-dashed rounded-lg p-8 transition-all duration-200 ease-in-out
+          ${isDragActive ? 'border-violet-500 bg-violet-50' : 'border-gray-300 hover:border-violet-400'}
+          ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+        `}
+      >
+        <input {...getInputProps()} />
+        <div className="flex flex-col items-center justify-center">
           <img
-            src={previewUrl}
-            alt="Preview"
-            className="w-full h-64 object-contain bg-gray-100 dark:bg-gray-800"
+            src={uploadIcon}
+            alt="Upload"
+            className="w-12 h-12 mb-4"
+            draggable="false"
           />
-          {isLoading && (
-            <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-4 border-white border-t-transparent"></div>
-            </div>
-          )}
-          <button
-            onClick={clearImage}
-            className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
-            disabled={isLoading}
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <p className="text-lg font-medium text-gray-700 mb-2">
+            {isDragActive ? 'Drop images here' : 'Drop images here or click to upload'}
+          </p>
+          <p className="text-sm text-gray-500">
+            Supported formats: JPEG, PNG, GIF, WebP (max 4MB)
+          </p>
         </div>
-      )}
+      </div>
+      <div className="flex gap-4 justify-end">
+        <button
+          onClick={onClear}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
+          type="button"
+        >
+          Clear All
+        </button>
+        <button
+          onClick={onExport}
+          className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-md hover:bg-violet-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
+          type="button"
+        >
+          Export CSV
+        </button>
+      </div>
     </div>
   )
 }

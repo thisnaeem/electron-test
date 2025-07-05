@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: electron-app
+productName: CSVGen Pro
 directories:
   buildResources: build
 files:

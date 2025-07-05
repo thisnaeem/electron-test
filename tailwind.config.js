@@ -9,7 +9,7 @@ module.exports = {
     extend: {
       fontFamily: {
         mono: ['ui-monospace', 'SFMono-Regular', 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', 'monospace'],
-        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', 'sans-serif']
+        sans: ['Figtree', 'ui-sans-serif', 'system-ui', 'sans-serif']
       },
       colors: {
         gray: {

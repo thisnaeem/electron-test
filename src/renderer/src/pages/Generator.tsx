@@ -1,117 +1,94 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
+import { useGemini } from '../context/useGemini'
 import ImageUploader from '../components/ImageUploader'
 import MetadataDisplay from '../components/MetadataDisplay'
-import { useGemini } from '../context/GeminiContext'
+
+interface MetadataResult {
+  title: string
+  keywords: string[]
+  filename: string
+}
+
+const MAX_FILE_SIZE = 4 * 1024 * 1024 // 4MB
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 const Generator = (): React.JSX.Element => {
-  const { generateMetadata, isApiKeyValid, isLoading } = useGemini()
-  const [file, setFile] = useState<File | null>(null)
-  const [metadata, setMetadata] = useState<{ title: string; tags: string[] } | null>(null)
+  const { generateMetadata } = useGemini()
+  const [results, setResults] = useState<MetadataResult[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isGenerating, setIsGenerating] = useState<boolean>(false)
 
-  const handleImageUpload = (uploadedFile: File): void => {
-    setFile(uploadedFile)
-    setMetadata(null)
+  const validateFiles = useCallback((files: File[]): File[] => {
+    return files.filter(file => {
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setError(`File type not supported: ${file.name}`)
+        return false
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        setError(`File too large (max 4MB): ${file.name}`)
+        return false
+      }
+      return true
+    })
+  }, [])
+
+  const processFiles = useCallback(async (files: File[]) => {
+    setIsProcessing(true)
     setError(null)
-  }
-
-  const handleGenerate = async (): Promise<void> => {
-    if (!file) {
-      setError('Please upload an image first')
-      return
-    }
-
-    if (!isApiKeyValid) {
-      setError('Please add a valid Gemini API key in Settings')
-      return
-    }
-
-    setIsGenerating(true)
-    setError(null)
+    const newResults: MetadataResult[] = []
 
     try {
-      // Convert file to data URL for processing
-      const reader = new FileReader()
-      reader.onload = async (e) => {
-        try {
-          const imageUrl = e.target?.result as string
-          const result = await generateMetadata(imageUrl)
-          setMetadata(result)
-        } catch (err) {
-          setError(`Error generating metadata: ${err instanceof Error ? err.message : String(err)}`)
-        } finally {
-          setIsGenerating(false)
-        }
+      const validFiles = validateFiles(files)
+      for (const file of validFiles) {
+        const result = await generateMetadata(file)
+        newResults.push({
+          ...result,
+          filename: file.name
+        })
       }
-      reader.onerror = () => {
-        setError('Error reading file')
-        setIsGenerating(false)
-      }
-      reader.readAsDataURL(file)
-    } catch (err) {
-      setError(`Error processing image: ${err instanceof Error ? err.message : String(err)}`)
-      setIsGenerating(false)
-    }
-  }
 
-  const copyToClipboard = (text: string): void => {
-    navigator.clipboard.writeText(text)
-      .then(() => {
-        // You could add a toast notification here
-        console.log('Copied to clipboard')
-      })
-      .catch(err => {
-        console.error('Failed to copy: ', err)
-      })
-  }
+      setResults(prev => [...prev, ...newResults])
+    } catch (error) {
+      console.error('Error processing files:', error)
+      setError(error instanceof Error ? error.message : 'Failed to process files')
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [generateMetadata, validateFiles])
+
+  const exportToCsv = useCallback(() => {
+    if (results.length === 0) return
+
+    const csvContent = results.map(item => {
+      const escapedTitle = `"${item.title.replace(/"/g, '""')}"`
+      const escapedKeywords = `"${item.keywords.join(', ').replace(/"/g, '""')}"`
+      return `${item.filename},${escapedTitle},${escapedKeywords}`
+    }).join('\n')
+
+    const header = 'Filename,Title,Keywords\n'
+    const blob = new Blob([header + csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const date = new Date().toISOString().split('T')[0]
+    link.href = URL.createObjectURL(blob)
+    link.download = `image-metadata-${date}.csv`
+    link.click()
+  }, [results])
+
+  const clearMetadata = useCallback(() => {
+    setResults([])
+    setError(null)
+  }, [])
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Image Metadata Generator</h1>
-        <p className="text-gray-600 dark:text-gray-300 mt-2">
-          Upload an image and generate metadata using Gemini AI
-        </p>
-      </div>
-
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-semibold text-gray-800 dark:text-white mb-4">Upload Image</h2>
-        <ImageUploader onImageUpload={handleImageUpload} isLoading={isGenerating} />
-
-        {file && !isGenerating && !metadata && (
-          <div className="mt-4 flex justify-center">
-            <button
-              onClick={handleGenerate}
-              disabled={!isApiKeyValid || isLoading}
-              className="px-6 py-2 bg-blue-600 text-white font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Generate Metadata
-            </button>
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-4 p-3 bg-red-50 border-l-4 border-red-500 text-red-700 dark:bg-red-900/30 dark:text-red-400">
-            {error}
-          </div>
-        )}
-
-        {!isApiKeyValid && (
-          <div className="mt-4 p-3 bg-yellow-50 border-l-4 border-yellow-500 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
-            Please add your Gemini API key in the Settings page
-          </div>
-        )}
-      </div>
-
-      {metadata && (
-        <MetadataDisplay
-          title={metadata.title}
-          tags={metadata.tags}
-          onCopyTitle={() => copyToClipboard(metadata.title)}
-          onCopyTags={() => copyToClipboard(metadata.tags.join(', '))}
-        />
-      )}
+    <div className="flex flex-col gap-4 p-4">
+      <ImageUploader
+        onFilesAccepted={processFiles}
+        isProcessing={isProcessing}
+        onExport={exportToCsv}
+        onClear={clearMetadata}
+      />
+      {error && <div className="text-red-500">{error}</div>}
+      <MetadataDisplay results={results} />
     </div>
   )
 }

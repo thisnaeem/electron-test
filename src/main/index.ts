@@ -98,14 +98,16 @@ autoUpdater.on('update-downloaded', (info) => {
 function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
-    width: 900,
+    width: 1100,
     height: 670,
     show: false,
     autoHideMenuBar: true,
+    frame: false, // Custom title bar
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
+      sandbox: false,
+      webSecurity: true
     }
   })
 
@@ -132,7 +134,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('CSV Gen Pro')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -159,6 +161,33 @@ app.whenReady().then(() => {
 
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
+  })
+
+  // IPC handler for opening external links
+  ipcMain.on('open-external-link', (_, url) => {
+    shell.openExternal(url)
+  })
+
+  // IPC handlers for window controls
+  ipcMain.on('window-minimize', () => {
+    mainWindow?.minimize()
+  })
+  ipcMain.on('window-maximize', () => {
+    mainWindow?.maximize()
+  })
+  ipcMain.on('window-unmaximize', () => {
+    mainWindow?.unmaximize()
+  })
+  ipcMain.on('window-close', () => {
+    mainWindow?.close()
+  })
+
+  // Emit maximize/unmaximize events for renderer state sync
+  mainWindow?.on('maximize', () => {
+    mainWindow?.webContents.send('window-maximized')
+  })
+  mainWindow?.on('unmaximize', () => {
+    mainWindow?.webContents.send('window-unmaximized')
   })
 
   createWindow()

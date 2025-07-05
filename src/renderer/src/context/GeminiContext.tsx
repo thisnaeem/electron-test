@@ -1,109 +1,104 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { useState, useCallback, ReactNode } from 'react'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import { GeminiContext } from './GeminiContext.context'
 
-interface GeminiContextType {
-  apiKey: string
-  setApiKey: (key: string) => void
-  isApiKeyValid: boolean
-  validateApiKey: (key: string) => Promise<boolean>
-  generateMetadata: (imageUrl: string) => Promise<{ title: string; tags: string[] }>
-  isLoading: boolean
-}
-
-const GeminiContext = createContext<GeminiContextType | undefined>(undefined)
-
-interface GeminiProviderProps {
-  children: ReactNode
-}
-
-export const GeminiProvider = ({ children }: GeminiProviderProps): React.JSX.Element => {
+export function GeminiProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const [apiKey, setApiKey] = useState<string>('')
   const [isApiKeyValid, setIsApiKeyValid] = useState<boolean>(false)
   const [isLoading, setIsLoading] = useState<boolean>(false)
 
-  useEffect(() => {
-    // Load API key from localStorage on component mount
-    const savedApiKey = localStorage.getItem('geminiApiKey')
-    if (savedApiKey) {
-      setApiKey(savedApiKey)
-      validateApiKey(savedApiKey)
-    }
-  }, [])
-
-  const validateApiKey = async (key: string): Promise<boolean> => {
-    if (!key) {
-      setIsApiKeyValid(false)
-      return false
-    }
-
-    setIsLoading(true)
+  const validateApiKey = useCallback(async (key: string): Promise<boolean> => {
+    if (!key) return false
     try {
-      // Simple validation - in a real app, you would make an actual API call to validate
-      // For demo purposes, we'll just check if the key is at least 20 characters long
-      const isValid = key.length >= 20
+      const genAI = new GoogleGenerativeAI(key)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      await model.startChat()
+      const isValid = true
       setIsApiKeyValid(isValid)
-
-      if (isValid) {
-        localStorage.setItem('geminiApiKey', key)
-      }
-
       return isValid
     } catch (error) {
       console.error('Error validating API key:', error)
       setIsApiKeyValid(false)
       return false
-    } finally {
-      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const generateMetadata = async (_imageUrl: string): Promise<{ title: string; tags: string[] }> => {
+  const generateMetadata = useCallback(async (input: File | string): Promise<{ title: string; keywords: string[] }> => {
     if (!apiKey || !isApiKeyValid) {
-      throw new Error('Valid API key is required')
+      throw new Error('Invalid or missing API key')
     }
 
     setIsLoading(true)
     try {
-      // In a real app, you would make an actual API call to Gemini
-      // For demo purposes, we'll return mock data
-      await new Promise(resolve => setTimeout(resolve, 1500)) // Simulate API call delay
+      const genAI = new GoogleGenerativeAI(apiKey)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
-      // Mock response based on image URL
-      const mockResponses: Record<string, { title: string; tags: string[] }> = {
-        default: {
-          title: 'Beautiful landscape with mountains',
-          tags: ['nature', 'landscape', 'mountains', 'scenic', 'outdoors']
-        }
+      // Convert File to base64 if needed
+      let base64Data: string
+      if (input instanceof File) {
+        base64Data = await new Promise<string>((resolve) => {
+          const reader = new FileReader()
+          reader.onload = () => {
+            resolve(reader.result as string)
+          }
+          reader.readAsDataURL(input)
+        })
+      } else {
+        base64Data = input
       }
 
-      return mockResponses.default
+      const prompt = `Generate metadata for this image in the following format:
+      1. A concise but descriptive title (max 20 words)
+      2. A list of 50 relevant keywords separated by commas
+
+      Format the response exactly like this, with a line break between title and keywords:
+      Title: [your title here]
+      Keywords: [comma-separated keywords]`
+
+      const result = await model.generateContent([
+        prompt,
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: base64Data.split(',')[1]
+          }
+        }
+      ])
+
+      const response = result.response
+      const text = response.text()
+
+      // Parse the response
+      const [titleLine, keywordsLine] = text.split('\n').filter(line => line.trim())
+
+      const title = titleLine.replace('Title:', '').trim()
+      const keywords = keywordsLine
+        .replace('Keywords:', '')
+        .split(',')
+        .map(k => k.trim())
+        .filter(k => k)
+
+      return { title, keywords }
     } catch (error) {
       console.error('Error generating metadata:', error)
       throw error
     } finally {
       setIsLoading(false)
     }
+  }, [apiKey, isApiKeyValid])
+
+  const contextValue = {
+    apiKey,
+    setApiKey,
+    isApiKeyValid,
+    validateApiKey,
+    generateMetadata,
+    isLoading
   }
 
   return (
-    <GeminiContext.Provider
-      value={{
-        apiKey,
-        setApiKey,
-        isApiKeyValid,
-        validateApiKey,
-        generateMetadata,
-        isLoading
-      }}
-    >
+    <GeminiContext.Provider value={contextValue}>
       {children}
     </GeminiContext.Provider>
   )
-}
-
-export const useGemini = (): GeminiContextType => {
-  const context = useContext(GeminiContext)
-  if (context === undefined) {
-    throw new Error('useGemini must be used within a GeminiProvider')
-  }
-  return context
 }
