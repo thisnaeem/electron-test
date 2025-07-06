@@ -9,8 +9,13 @@ files:
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!prisma/migrations/**'
+  - 'node_modules/.prisma/**'
+  - 'node_modules/@prisma/client/**'
 asarUnpack:
   - resources/**
+  - node_modules/.prisma/**
+  - node_modules/@prisma/client/**
 win:
   executableName: electron-app
 nsis:
