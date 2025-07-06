@@ -66,7 +66,7 @@ const Generator = (): React.JSX.Element => {
             })
             return {
               imageData,
-              filename: file.name
+          filename: file.name
             }
           })
         )
@@ -87,7 +87,7 @@ const Generator = (): React.JSX.Element => {
             // Add the new metadata to Redux store
             dispatch(addMetadata(result))
           }
-        } catch (err) {
+    } catch (err) {
           console.error(`Error generating metadata for ${imageInputs[i].filename}:`, err)
           // Continue with next image even if one fails
         }
@@ -188,8 +188,8 @@ const Generator = (): React.JSX.Element => {
         {/* Image Uploader - Only show if no files */}
         {files.length === 0 && (
           <div className="h-full flex items-center justify-center">
-            <ImageUploader
-              onFilesAccepted={handleFilesAccepted}
+        <ImageUploader
+          onFilesAccepted={handleFilesAccepted}
               isProcessing={isProcessing || isLoading}
             />
           </div>
@@ -198,7 +198,7 @@ const Generator = (): React.JSX.Element => {
         {/* Uploaded Images Display - Only show if files exist */}
         {files.length > 0 && (
           <UploadedImagesDisplay
-            onClear={handleClear}
+          onClear={handleClear}
             onProcess={handleProcess}
             onFilesAccepted={handleFilesAccepted}
             onImageRemoved={handleImageRemoved}
@@ -211,7 +211,7 @@ const Generator = (): React.JSX.Element => {
             processingProgress={isProcessing ? { current: currentProcessingIndex, total: totalToProcess } : undefined}
             currentProcessingFilename={currentProcessingFilename}
             onMetadataUpdated={handleMetadataUpdated}
-          />
+        />
         )}
 
 
@@ -238,12 +238,12 @@ const Generator = (): React.JSX.Element => {
                 >
                   Close
                 </button>
-                <button
-                  onClick={handleRetry}
+              <button
+                onClick={handleRetry}
                   className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
-                >
-                  Retry
-                </button>
+              >
+                Retry
+              </button>
               </div>
             </div>
           </div>

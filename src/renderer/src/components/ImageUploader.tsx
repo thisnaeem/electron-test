@@ -140,10 +140,10 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         // Create file data object
         const fileData = {
           id: fileId,
-          name: file.name,
-          type: file.type,
+        name: file.name,
+        type: file.type,
           size: file.size,
-          lastModified: file.lastModified,
+        lastModified: file.lastModified,
           previewPath: '',
           previewData: ''
         }
@@ -210,7 +210,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
     if (files.length >= 1000) {
       setError('You have reached the maximum limit of 1000 files.')
       return
-    }
+  }
 
     const input = document.createElement('input')
     input.type = 'file'
@@ -244,34 +244,34 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
       )}
 
       <div
-        className={`
+            className={`
           rounded-xl p-8 transition-all duration-200 ease-in-out bg-[#f9fafb] w-3/4 max-w-3xl h-96 flex items-center justify-center
           ${isDragOver ? 'bg-violet-50' : 'hover:bg-gray-100'}
-          ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-        `}
+              ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+            `}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={isProcessing ? undefined : handleClick}
-        onMouseEnter={() => setIsHovering(true)}
-        onMouseLeave={() => setIsHovering(false)}
-      >
-        <div className="flex flex-col items-center justify-center">
-          <img
-            src={isHovering ? addSquareIcon : uploadIcon}
-            alt="Upload"
-            className="w-16 h-16 mb-4 transition-all duration-200"
-            draggable="false"
-          />
-          <p className="text-lg font-medium text-gray-700 mb-2">
+            onMouseEnter={() => setIsHovering(true)}
+            onMouseLeave={() => setIsHovering(false)}
+          >
+            <div className="flex flex-col items-center justify-center">
+              <img
+                src={isHovering ? addSquareIcon : uploadIcon}
+                alt="Upload"
+                className="w-16 h-16 mb-4 transition-all duration-200"
+                draggable="false"
+              />
+              <p className="text-lg font-medium text-gray-700 mb-2">
             {isDragOver ? 'Drop images here' : 'Drop images here or click to upload'}
-          </p>
-          <p className="text-sm text-gray-500">
+              </p>
+              <p className="text-sm text-gray-500">
             Supported formats: JPEG, PNG, GIF, WebP (max 10MB, up to 1000 files)
-          </p>
-        </div>
-      </div>
-    </>
+              </p>
+            </div>
+              </div>
+            </>
   )
 }
 

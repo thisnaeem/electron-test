@@ -1,11 +1,13 @@
 import { configureStore } from '@reduxjs/toolkit'
 import settingsReducer from './slices/settingsSlice'
 import filesReducer from './slices/filesSlice'
+import authReducer from './slices/authSlice'
 
 export const store = configureStore({
   reducer: {
     settings: settingsReducer,
-    files: filesReducer
+    files: filesReducer,
+    auth: authReducer
   }
 })
 

@@ -6,6 +6,12 @@ import electronUpdater, { type AppUpdater } from 'electron-updater'
 import electronLog from 'electron-log'
 import fs from 'fs'
 import path from 'path'
+import { authService } from './auth'
+import { disconnectDatabase } from './database'
+
+// Load environment variables
+import dotenv from 'dotenv'
+dotenv.config()
 
 export function getAutoUpdater(): AppUpdater {
   const { autoUpdater } = electronUpdater
@@ -145,12 +151,16 @@ app.whenReady().then(() => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('CSV Gen Pro')
 
+
+
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
   // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
@@ -175,6 +185,38 @@ app.whenReady().then(() => {
   // IPC handler for opening external links
   ipcMain.on('open-external-link', (_, url) => {
     shell.openExternal(url)
+  })
+
+  // IPC handlers for authentication
+  ipcMain.handle('google-login', async () => {
+    try {
+      const result = await authService.initiateGoogleLogin()
+      return {
+        success: true,
+        user: result.user
+      }
+    } catch (error) {
+      console.error('Google login error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Authentication failed'
+      }
+    }
+  })
+
+  ipcMain.handle('logout', async () => {
+    try {
+      await authService.logout()
+      return {
+        success: true
+      }
+    } catch (error) {
+      console.error('Logout error:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Logout failed'
+      }
+    }
   })
 
   // IPC handlers for file operations - Optimized for performance
@@ -347,10 +389,16 @@ app.whenReady().then(() => {
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   if (process.platform !== 'darwin') {
+    await disconnectDatabase()
     app.quit()
   }
+})
+
+// Handle app quit
+app.on('before-quit', async () => {
+  await disconnectDatabase()
 })
 
 // In this file you can include the rest of your app's specific main process
