@@ -1,6 +1,6 @@
 {
   "name": "electron-app",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -29,10 +29,13 @@
     "@electron-toolkit/preload": "^3.0.1",
     "@electron-toolkit/utils": "^4.0.0",
     "@google/generative-ai": "^0.24.1",
+    "@reduxjs/toolkit": "^2.8.2",
     "electron-log": "^5.1.2",
     "electron-updater": "^6.3.9",
     "react-dropzone": "^14.3.8",
-    "react-router-dom": "^7.6.3"
+    "react-redux": "^9.2.0",
+    "react-router-dom": "^7.6.3",
+    "redux-persist": "^6.0.0"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-prettier": "^3.0.0",

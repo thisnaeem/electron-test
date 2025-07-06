@@ -3,6 +3,9 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/ChatGPT Image Jun 29, 2025, 02_45_50 AM.png?asset'
 import electronUpdater, { type AppUpdater } from 'electron-updater'
+import electronLog from 'electron-log'
+import fs from 'fs'
+import path from 'path'
 
 export function getAutoUpdater(): AppUpdater {
   const { autoUpdater } = electronUpdater
@@ -13,11 +16,17 @@ export function getAutoUpdater(): AppUpdater {
 const autoUpdater = getAutoUpdater()
 let mainWindow: BrowserWindow | null = null
 
+// Create app data directory for storing image previews
+const appDataPath = app.getPath('userData')
+const previewsDir = path.join(appDataPath, 'previews')
+if (!fs.existsSync(previewsDir)) {
+  fs.mkdirSync(previewsDir, { recursive: true })
+}
+
 // Enable logging for debugging
 if (is.dev) {
-  const log = require('electron-log')
-  autoUpdater.logger = log
-  log.transports.file.level = 'debug'
+  autoUpdater.logger = electronLog
+  electronLog.transports.file.level = 'debug'
   // Force dev update config for development testing
   autoUpdater.forceDevUpdateConfig = true
 }
@@ -99,7 +108,7 @@ function createWindow(): void {
   // Create the browser window.
   mainWindow = new BrowserWindow({
     width: 1100,
-    height: 670,
+    height: 700,
     show: false,
     autoHideMenuBar: true,
     frame: false, // Custom title bar
@@ -166,6 +175,137 @@ app.whenReady().then(() => {
   // IPC handler for opening external links
   ipcMain.on('open-external-link', (_, url) => {
     shell.openExternal(url)
+  })
+
+  // IPC handlers for file operations - Optimized for performance
+  ipcMain.handle('save-image-preview', async (_, imageData, filename) => {
+    try {
+      // Remove header from base64 data
+      const base64Data = imageData.replace(/^data:image\/\w+;base64,/, '')
+
+      // Create a unique filename based on the original name
+      const safeFilename = filename.replace(/[^a-zA-Z0-9]/g, '_')
+      const uniqueFilename = `${safeFilename}_${Date.now()}.png`
+      const filePath = path.join(previewsDir, uniqueFilename)
+
+      // Use async file operations for better performance with many files
+      await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'))
+
+      return {
+        success: true,
+        path: filePath,
+        id: uniqueFilename
+      }
+    } catch (error: Error | NodeJS.ErrnoException | unknown) {
+      console.error('Error saving image preview:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  ipcMain.handle('get-image-previews', async () => {
+    try {
+      const files = await fs.promises.readdir(previewsDir)
+      const previews: Record<string, string> = {}
+
+      // Process files in batches to prevent memory issues with large numbers of files
+      const batchSize = 10
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize)
+
+        await Promise.all(batch.map(async (file) => {
+          try {
+            const filePath = path.join(previewsDir, file)
+            const data = await fs.promises.readFile(filePath)
+            const base64 = `data:image/png;base64,${data.toString('base64')}`
+            previews[file] = base64
+          } catch (fileError) {
+            console.error(`Error reading file ${file}:`, fileError)
+            // Continue with other files even if one fails
+          }
+        }))
+
+        // Small delay between batches to prevent overwhelming the system
+        if (i + batchSize < files.length) {
+          await new Promise(resolve => setTimeout(resolve, 10))
+        }
+      }
+
+      return {
+        success: true,
+        previews
+      }
+    } catch (error: Error | NodeJS.ErrnoException | unknown) {
+      console.error('Error getting image previews:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  ipcMain.handle('delete-image-preview', async (_, filename) => {
+    try {
+      const filePath = path.join(previewsDir, filename)
+
+      // Use async file operations for better performance
+      try {
+        await fs.promises.access(filePath, fs.constants.F_OK)
+        await fs.promises.unlink(filePath)
+      } catch {
+        // File doesn't exist, which is fine
+        console.log(`File ${filename} doesn't exist, skipping deletion`)
+      }
+
+      return {
+        success: true
+      }
+    } catch (error: Error | NodeJS.ErrnoException | unknown) {
+      console.error('Error deleting image preview:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
+  })
+
+  ipcMain.handle('clear-all-previews', async () => {
+    try {
+      const files = await fs.promises.readdir(previewsDir)
+
+      // Process deletions in batches for better performance with many files
+      const batchSize = 20
+      for (let i = 0; i < files.length; i += batchSize) {
+        const batch = files.slice(i, i + batchSize)
+
+        await Promise.all(batch.map(async (file) => {
+          try {
+            const filePath = path.join(previewsDir, file)
+            await fs.promises.unlink(filePath)
+          } catch (fileError) {
+            console.error(`Error deleting file ${file}:`, fileError)
+            // Continue with other files even if one fails
+          }
+        }))
+
+        // Small delay between batches
+        if (i + batchSize < files.length) {
+          await new Promise(resolve => setTimeout(resolve, 5))
+        }
+      }
+
+      return {
+        success: true
+      }
+    } catch (error: Error | NodeJS.ErrnoException | unknown) {
+      console.error('Error clearing all previews:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      }
+    }
   })
 
   // IPC handlers for window controls

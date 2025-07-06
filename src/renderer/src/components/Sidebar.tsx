@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom'
 import AiGenerativeIcon from '../assets/ai-generative.svg'
 import SettingsIcon from '../assets/settings.svg'
+import AppLogo from '../assets/app-logo.png'
 
 const SIDEBAR_WIDTH = 80
 
@@ -10,10 +11,17 @@ const Sidebar = (): React.JSX.Element => {
 
   return (
     <div
-      className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-20 bg-[#f6f6f8] dark:bg-gray-800 shadow-lg z-40 flex flex-col justify-between border-r border-gray-200 dark:border-gray-700"
+      className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-20 bg-[#f6f6f8] dark:bg-gray-800 z-40 flex flex-col justify-between"
       style={{ minWidth: SIDEBAR_WIDTH }}
     >
-      <nav className="flex-1 flex flex-col items-center pt-8 ">
+      <nav className="flex-1 flex flex-col items-center pt-4">
+        <div className="mb-4">
+          <img
+            src={AppLogo}
+            alt="App Logo"
+            className="w-8 h-8 transition-all duration-300 hover:scale-110 hover:rotate-12 cursor-pointer"
+          />
+        </div>
         <Link
           to="/generator"
           className={`flex flex-col items-center w-16 h-16 justify-center rounded transition-all duration-200 ${

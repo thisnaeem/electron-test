@@ -1,8 +1,18 @@
+export interface MetadataResult {
+  filename: string
+  title: string
+  keywords: string[]
+}
+
+export interface ImageInput {
+  imageData: string
+  filename: string
+}
+
 export interface GeminiContextType {
   apiKey: string
-  setApiKey: (key: string) => void
   isApiKeyValid: boolean
-  validateApiKey: (key: string) => Promise<boolean>
-  generateMetadata: (input: File | string) => Promise<{ title: string; keywords: string[] }>
+  generateMetadata: (input: ImageInput[]) => Promise<MetadataResult[]>
   isLoading: boolean
+  error: string | null
 }

@@ -21,7 +21,35 @@ const api = {
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
   // Open external links
-  openExternalLink: (url: string) => ipcRenderer.send('open-external-link', url)
+  openExternalLink: (url: string) => ipcRenderer.send('open-external-link', url),
+
+  // File operations
+  readImageFile: (filePath: string) => ipcRenderer.invoke('read-image-file', filePath),
+  saveImagePreview: (imageData: string, filename: string) =>
+    ipcRenderer.invoke('save-image-preview', imageData, filename),
+  getImagePreviews: () => ipcRenderer.invoke('get-image-previews'),
+  deleteImagePreview: (filename: string) => ipcRenderer.invoke('delete-image-preview', filename),
+  clearAllPreviews: () => ipcRenderer.invoke('clear-all-previews'),
+
+  // Window control
+  onWindowMaximized: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('window-maximized', listener)
+    return () => {
+      ipcRenderer.removeListener('window-maximized', listener)
+    }
+  },
+  onWindowUnmaximized: (callback: () => void) => {
+    const listener = () => callback()
+    ipcRenderer.on('window-unmaximized', listener)
+    return () => {
+      ipcRenderer.removeListener('window-unmaximized', listener)
+    }
+  },
+  minimizeWindow: () => ipcRenderer.send('window-minimize'),
+  maximizeWindow: () => ipcRenderer.send('window-maximize'),
+  unmaximizeWindow: () => ipcRenderer.send('window-unmaximize'),
+  closeWindow: () => ipcRenderer.send('window-close')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

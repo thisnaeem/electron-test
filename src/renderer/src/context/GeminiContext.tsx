@@ -1,99 +1,154 @@
-import { useState, useCallback, ReactNode } from 'react'
-import { GoogleGenerativeAI } from '@google/generative-ai'
+import { useCallback, ReactNode, useState } from 'react'
+import { GoogleGenerativeAI, Part } from '@google/generative-ai'
 import { GeminiContext } from './GeminiContext.context'
+import { useAppSelector } from '../store/hooks'
+
+// Retry configuration
+const MAX_RETRIES = 3
+const RETRY_DELAY = 1000 // ms
+
+// Helper function to wait
+const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 export function GeminiProvider({ children }: { children: ReactNode }): React.JSX.Element {
-  const [apiKey, setApiKey] = useState<string>('')
-  const [isApiKeyValid, setIsApiKeyValid] = useState<boolean>(false)
+  const { apiKey, isApiKeyValid } = useAppSelector(state => state.settings)
   const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const validateApiKey = useCallback(async (key: string): Promise<boolean> => {
-    if (!key) return false
-    try {
-      const genAI = new GoogleGenerativeAI(key)
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
-      await model.startChat()
-      const isValid = true
-      setIsApiKeyValid(isValid)
-      return isValid
-    } catch (error) {
-      console.error('Error validating API key:', error)
-      setIsApiKeyValid(false)
-      return false
-    }
-  }, [])
-
-  const generateMetadata = useCallback(async (input: File | string): Promise<{ title: string; keywords: string[] }> => {
+  const generateMetadata = useCallback(async (input: { imageData: string; filename: string }[]): Promise<{ filename: string; title: string; keywords: string[] }[]> => {
     if (!apiKey || !isApiKeyValid) {
-      throw new Error('Invalid or missing API key')
+      throw new Error('Invalid or missing API key. Please check your API key in Settings.')
     }
 
     setIsLoading(true)
+    setError(null)
+
+    const results: { filename: string; title: string; keywords: string[] }[] = []
+
     try {
       const genAI = new GoogleGenerativeAI(apiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      const modelName = 'gemini-2.0-flash'
+      const model = genAI.getGenerativeModel({ model: modelName })
 
-      // Convert File to base64 if needed
-      let base64Data: string
-      if (input instanceof File) {
-        base64Data = await new Promise<string>((resolve) => {
-          const reader = new FileReader()
-          reader.onload = () => {
-            resolve(reader.result as string)
-          }
-          reader.readAsDataURL(input)
-        })
-      } else {
-        base64Data = input
-      }
+      // Process each image individually
+      for (let i = 0; i < input.length; i++) {
+        const { imageData, filename } = input[i]
+        let retries = 0
+        let lastError: Error | null = null
 
-      const prompt = `Generate metadata for this image in the following format:
-      1. A concise but descriptive title (max 20 words)
-      2. A list of 50 relevant keywords separated by commas
+        while (retries < MAX_RETRIES) {
+          try {
+            console.log(`Processing image ${i + 1}/${input.length}: ${filename}, attempt ${retries + 1}`)
 
-      Format the response exactly like this, with a line break between title and keywords:
-      Title: [your title here]
-      Keywords: [comma-separated keywords]`
+            // Check if base64 data is valid
+            if (!imageData || !imageData.includes(',')) {
+              throw new Error('Invalid image data')
+            }
 
-      const result = await model.generateContent([
-        prompt,
-        {
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: base64Data.split(',')[1]
+            const prompt = `Analyze this image and provide metadata in the following exact format:
+
+Title: [A descriptive title in exactly 15 words]
+Keywords: [Exactly 45-50 relevant keywords separated by commas]
+
+Requirements:
+- Title must be exactly 15 words, descriptive and engaging
+- Keywords must be 45-50 items, relevant to the image content
+- Focus on objects, colors, style, mood, and context visible in the image
+- Use single words or short phrases for keywords
+- Separate keywords with commas only
+
+Respond with only the title and keywords in the specified format.`
+
+            const content: (string | Part)[] = [
+              prompt,
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: imageData.split(',')[1]
+                }
+              }
+            ]
+
+            const result = await model.generateContent(content)
+            const response = result.response
+            const text = response.text()
+
+            if (!text || text.trim().length === 0) {
+              throw new Error('Empty response from Gemini API')
+            }
+
+            // Parse the response
+            const lines = text.split('\n').filter(line => line.trim())
+            let title = ''
+            let keywords: string[] = []
+
+            for (const line of lines) {
+              if (line.toLowerCase().includes('title:')) {
+                title = line.replace(/title:/i, '').trim()
+              } else if (line.toLowerCase().includes('keywords:')) {
+                keywords = line
+                  .replace(/keywords:/i, '')
+                  .split(',')
+                  .map(k => k.trim())
+                  .filter(k => k)
+              }
+            }
+
+            // Fallback if parsing failed
+            if (!title) {
+              title = `Generated title for ${filename}`
+            }
+            if (keywords.length === 0) {
+              keywords = ['image', 'photo', 'picture']
+            }
+
+            results.push({
+              filename,
+              title,
+              keywords
+            })
+
+            break // Success, exit retry loop
+
+          } catch (error) {
+            console.error(`Image ${i + 1} (${filename}), attempt ${retries + 1} failed:`, error)
+            lastError = error instanceof Error ? error : new Error('Unknown error occurred')
+            setError(lastError.message)
+
+            retries++
+            if (retries < MAX_RETRIES) {
+              console.log(`Retrying in ${RETRY_DELAY}ms...`)
+              await wait(RETRY_DELAY * retries)
+            }
           }
         }
-      ])
 
-      const response = result.response
-      const text = response.text()
+        // If all retries failed for this image
+        if (retries >= MAX_RETRIES) {
+          results.push({
+            filename,
+            title: `Failed to generate title for ${filename}`,
+            keywords: ['error', 'failed', 'generation']
+          })
+        }
+      }
 
-      // Parse the response
-      const [titleLine, keywordsLine] = text.split('\n').filter(line => line.trim())
-
-      const title = titleLine.replace('Title:', '').trim()
-      const keywords = keywordsLine
-        .replace('Keywords:', '')
-        .split(',')
-        .map(k => k.trim())
-        .filter(k => k)
-
-      return { title, keywords }
-    } catch (error) {
-      console.error('Error generating metadata:', error)
-      throw error
-    } finally {
       setIsLoading(false)
+      return results
+
+    } catch (error) {
+      console.error('Error in generateMetadata:', error)
+      setIsLoading(false)
+      throw error instanceof Error ? error : new Error('Failed to generate metadata')
     }
   }, [apiKey, isApiKeyValid])
 
   const contextValue = {
     apiKey,
-    setApiKey,
     isApiKeyValid,
-    validateApiKey,
     generateMetadata,
-    isLoading
+    isLoading,
+    error
   }
 
   return (

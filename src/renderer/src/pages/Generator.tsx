@@ -1,94 +1,254 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useGemini } from '../context/useGemini'
+import { useAppSelector, useAppDispatch } from '../store/hooks'
+import { ImageInput } from '../context/GeminiContext.types'
+import { addMetadata, updateMetadata, removeMetadata, clearMetadata } from '../store/slices/filesSlice'
 import ImageUploader from '../components/ImageUploader'
-import MetadataDisplay from '../components/MetadataDisplay'
+import UploadedImagesDisplay from '../components/UploadedImagesDisplay'
 
-interface MetadataResult {
-  title: string
-  keywords: string[]
-  filename: string
-}
-
-const MAX_FILE_SIZE = 4 * 1024 * 1024 // 4MB
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 const Generator = (): React.JSX.Element => {
-  const { generateMetadata } = useGemini()
-  const [results, setResults] = useState<MetadataResult[]>([])
+  const { generateMetadata, isLoading, error } = useGemini()
+  const dispatch = useAppDispatch()
+  const { files, metadata } = useAppSelector(state => state.files)
+  const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [currentProcessingIndex, setCurrentProcessingIndex] = useState(0)
+  const [totalToProcess, setTotalToProcess] = useState(0)
+  const [currentProcessingFilename, setCurrentProcessingFilename] = useState<string | null>(null)
+  const [showErrorDialog, setShowErrorDialog] = useState(false)
 
-  const validateFiles = useCallback((files: File[]): File[] => {
-    return files.filter(file => {
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        setError(`File type not supported: ${file.name}`)
-        return false
-      }
-      if (file.size > MAX_FILE_SIZE) {
-        setError(`File too large (max 4MB): ${file.name}`)
-        return false
-      }
-      return true
-    })
+  // Clear metadata when no files are left
+  useEffect(() => {
+    if (files.length === 0 && metadata.length > 0) {
+      dispatch(clearMetadata())
+      setSelectedImageId(null)
+    }
+  }, [files.length, metadata.length, dispatch])
+
+  // Clear selected image if it no longer exists
+  useEffect(() => {
+    if (selectedImageId && !files.find(f => f.id === selectedImageId)) {
+      setSelectedImageId(null)
+    }
+  }, [files, selectedImageId])
+
+  const handleFilesAccepted = useCallback((files: File[] | ImageInput[]) => {
+    console.log('Files accepted:', files.length)
   }, [])
 
-  const processFiles = useCallback(async (files: File[]) => {
+  const handleImageSelected = useCallback((imageId: string) => {
+    setSelectedImageId(imageId)
+  }, [])
+
+  const handleProcess = useCallback(async (input: File[] | ImageInput[]) => {
+    if (input.length === 0) return
+
     setIsProcessing(true)
-    setError(null)
-    const newResults: MetadataResult[] = []
 
     try {
-      const validFiles = validateFiles(files)
-      for (const file of validFiles) {
-        const result = await generateMetadata(file)
-        newResults.push({
-          ...result,
-          filename: file.name
-        })
+      // Convert to ImageInput format if needed
+      let imageInputs: ImageInput[]
+
+      if (input.length > 0 && 'imageData' in input[0]) {
+        // Already in ImageInput format
+        imageInputs = input as ImageInput[]
+      } else {
+        // Convert File[] to ImageInput[] (this shouldn't happen in current flow)
+        const fileInputs = input as File[]
+        imageInputs = await Promise.all(
+          fileInputs.map(async (file) => {
+            const imageData = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader()
+              reader.onload = () => resolve(reader.result as string)
+              reader.onerror = () => reject(new Error('Failed to read file'))
+              reader.readAsDataURL(file)
+            })
+            return {
+              imageData,
+              filename: file.name
+            }
+          })
+        )
       }
 
-      setResults(prev => [...prev, ...newResults])
-    } catch (error) {
-      console.error('Error processing files:', error)
-      setError(error instanceof Error ? error.message : 'Failed to process files')
+      // Set up progress tracking
+      setTotalToProcess(imageInputs.length)
+      setCurrentProcessingIndex(0)
+
+      // Process images one by one and update metadata progressively
+      for (let i = 0; i < imageInputs.length; i++) {
+        setCurrentProcessingIndex(i + 1)
+        setCurrentProcessingFilename(imageInputs[i].filename)
+        const singleInput = [imageInputs[i]]
+        try {
+          const result = await generateMetadata(singleInput)
+          if (result.length > 0) {
+            // Add the new metadata to Redux store
+            dispatch(addMetadata(result))
+          }
+        } catch (err) {
+          console.error(`Error generating metadata for ${imageInputs[i].filename}:`, err)
+          // Continue with next image even if one fails
+        }
+      }
+    } catch (err) {
+      console.error('Error generating metadata:', err)
+      setShowErrorDialog(true)
     } finally {
       setIsProcessing(false)
+      setCurrentProcessingIndex(0)
+      setTotalToProcess(0)
+      setCurrentProcessingFilename(null)
     }
-  }, [generateMetadata, validateFiles])
+  }, [generateMetadata])
 
-  const exportToCsv = useCallback(() => {
-    if (results.length === 0) return
+  const handleImageRemoved = useCallback((filename: string) => {
+    // Remove metadata for the removed image
+    dispatch(removeMetadata(filename))
 
-    const csvContent = results.map(item => {
-      const escapedTitle = `"${item.title.replace(/"/g, '""')}"`
-      const escapedKeywords = `"${item.keywords.join(', ').replace(/"/g, '""')}"`
-      return `${item.filename},${escapedTitle},${escapedKeywords}`
-    }).join('\n')
+    // Clear selection if the removed image was selected
+    const removedFile = files.find(f => f.name === filename)
+    if (removedFile && selectedImageId === removedFile.id) {
+      setSelectedImageId(null)
+    }
+  }, [files, selectedImageId, dispatch])
 
-    const header = 'Filename,Title,Keywords\n'
-    const blob = new Blob([header + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const date = new Date().toISOString().split('T')[0]
-    link.href = URL.createObjectURL(blob)
-    link.download = `image-metadata-${date}.csv`
-    link.click()
-  }, [results])
+  const handleClear = useCallback(() => {
+    dispatch(clearMetadata())
+    setSelectedImageId(null)
+  }, [dispatch])
 
-  const clearMetadata = useCallback(() => {
-    setResults([])
-    setError(null)
+  const handleCloseErrorDialog = useCallback(() => {
+    setShowErrorDialog(false)
   }, [])
 
+  const handleRetry = useCallback(() => {
+    setShowErrorDialog(false)
+    if (files.length > 0) {
+      // Create ImageInput array from stored files for retry
+      const imageInputs = files
+        .filter(file => file.previewData && file.previewData.trim() !== '')
+        .map(file => ({
+          imageData: file.previewData,
+          filename: file.name
+        }))
+
+      if (imageInputs.length > 0) {
+        handleProcess(imageInputs as ImageInput[])
+      }
+    }
+  }, [files, handleProcess])
+
+  const handleExportCSV = useCallback(() => {
+    if (metadata.length === 0) return
+
+    // Create CSV content
+    const csvHeaders = ['Filename', 'Title', 'Keywords']
+    const csvRows = metadata.map(result => [
+      result.filename,
+      result.title,
+      result.keywords.join(', ')
+    ])
+
+    const csvContent = [
+      csvHeaders.join(','),
+      ...csvRows.map(row =>
+        row.map(cell => `"${cell.replace(/"/g, '""')}"`) // Escape quotes in CSV
+          .join(',')
+      )
+    ].join('\n')
+
+    // Create and download the CSV file
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `image-metadata-${new Date().toISOString().split('T')[0]}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }, [metadata])
+
+    const handleMetadataUpdated = useCallback((filename: string, updatedMetadata: { title: string; keywords: string[] }) => {
+    dispatch(updateMetadata({
+      filename,
+      title: updatedMetadata.title,
+      keywords: updatedMetadata.keywords
+    }))
+  }, [dispatch])
+
+
+
   return (
-    <div className="flex flex-col gap-4 p-4">
-      <ImageUploader
-        onFilesAccepted={processFiles}
-        isProcessing={isProcessing}
-        onExport={exportToCsv}
-        onClear={clearMetadata}
-      />
-      {error && <div className="text-red-500">{error}</div>}
-      <MetadataDisplay results={results} />
+    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-gray-900">
+      <div className="min-h-full w-full p-4 relative">
+        {/* Image Uploader - Only show if no files */}
+        {files.length === 0 && (
+          <div className="h-full flex items-center justify-center">
+            <ImageUploader
+              onFilesAccepted={handleFilesAccepted}
+              isProcessing={isProcessing || isLoading}
+            />
+          </div>
+        )}
+
+        {/* Uploaded Images Display - Only show if files exist */}
+        {files.length > 0 && (
+          <UploadedImagesDisplay
+            onClear={handleClear}
+            onProcess={handleProcess}
+            onFilesAccepted={handleFilesAccepted}
+            onImageRemoved={handleImageRemoved}
+            onImageSelected={handleImageSelected}
+            selectedImageId={selectedImageId}
+            isProcessing={isProcessing || isLoading}
+            hasMetadata={metadata.length > 0}
+            metadataResults={metadata}
+            onExportCSV={handleExportCSV}
+            processingProgress={isProcessing ? { current: currentProcessingIndex, total: totalToProcess } : undefined}
+            currentProcessingFilename={currentProcessingFilename}
+            onMetadataUpdated={handleMetadataUpdated}
+          />
+        )}
+
+
+
+        {/* Error Dialog */}
+        {showErrorDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
+              <div className="flex items-center mb-4">
+                <svg className="h-6 w-6 text-red-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  Generation Failed
+                </h3>
+              </div>
+              <p className="text-gray-600 dark:text-gray-300 mb-6">
+                {error || 'An error occurred while generating metadata. Please try again.'}
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={handleCloseErrorDialog}
+                  className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={handleRetry}
+                  className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
