@@ -44,10 +44,6 @@ declare global {
       deleteImagePreview: (filename: string) => Promise<SaveImagePreviewResponse>
       clearAllPreviews: () => Promise<SaveImagePreviewResponse>
 
-      // Authentication
-      googleLogin: () => Promise<{ success: boolean; user?: any; error?: string }>
-      logout: () => Promise<{ success: boolean; error?: string }>
-
       // Window control
       onWindowMaximized: (callback: () => void) => () => void
       onWindowUnmaximized: (callback: () => void) => () => void

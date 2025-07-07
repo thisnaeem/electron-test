@@ -1,21 +1,16 @@
 import { useState, useCallback, useEffect } from 'react'
 import { useGemini } from '../context/useGemini'
 import { useAppSelector, useAppDispatch } from '../store/hooks'
-import { ImageInput } from '../context/GeminiContext.types'
+import { ImageInput, MetadataResult } from '../context/GeminiContext.types'
 import { addMetadata, updateMetadata, removeMetadata, clearMetadata } from '../store/slices/filesSlice'
 import ImageUploader from '../components/ImageUploader'
 import UploadedImagesDisplay from '../components/UploadedImagesDisplay'
 
-
 const Generator = (): React.JSX.Element => {
-  const { generateMetadata, isLoading, error } = useGemini()
+  const { generateMetadata, isLoading, error, processingProgress } = useGemini()
   const dispatch = useAppDispatch()
   const { files, metadata } = useAppSelector(state => state.files)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [currentProcessingIndex, setCurrentProcessingIndex] = useState(0)
-  const [totalToProcess, setTotalToProcess] = useState(0)
-  const [currentProcessingFilename, setCurrentProcessingFilename] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
 
   // Clear metadata when no files are left
@@ -44,8 +39,6 @@ const Generator = (): React.JSX.Element => {
   const handleProcess = useCallback(async (input: File[] | ImageInput[]) => {
     if (input.length === 0) return
 
-    setIsProcessing(true)
-
     try {
       // Convert to ImageInput format if needed
       let imageInputs: ImageInput[]
@@ -66,42 +59,35 @@ const Generator = (): React.JSX.Element => {
             })
             return {
               imageData,
-          filename: file.name
+              filename: file.name
             }
           })
         )
       }
 
-      // Set up progress tracking
-      setTotalToProcess(imageInputs.length)
-      setCurrentProcessingIndex(0)
-
-      // Process images one by one and update metadata progressively
-      for (let i = 0; i < imageInputs.length; i++) {
-        setCurrentProcessingIndex(i + 1)
-        setCurrentProcessingFilename(imageInputs[i].filename)
-        const singleInput = [imageInputs[i]]
-        try {
-          const result = await generateMetadata(singleInput)
-          if (result.length > 0) {
-            // Add the new metadata to Redux store
-            dispatch(addMetadata(result))
-          }
-    } catch (err) {
-          console.error(`Error generating metadata for ${imageInputs[i].filename}:`, err)
-          // Continue with next image even if one fails
-        }
+      // Real-time metadata callback - add each result immediately when generated
+      const handleMetadataGenerated = (result: MetadataResult): void => {
+        console.log('🔥 Real-time metadata generated:', result.filename)
+        dispatch(addMetadata([result]))
       }
+
+      // Use the new parallel processing system with real-time callback
+      const results = await generateMetadata(imageInputs, handleMetadataGenerated)
+
+      // Final fallback - ensure any missed results are added
+      // (This shouldn't be needed with real-time updates, but kept as safety net)
+      const existingFilenames = metadata.map(m => m.filename)
+      const newResults = results.filter(r => !existingFilenames.includes(r.filename))
+      if (newResults.length > 0) {
+        console.log(`📋 Adding ${newResults.length} missed results to store`)
+        dispatch(addMetadata(newResults))
+      }
+
     } catch (err) {
       console.error('Error generating metadata:', err)
       setShowErrorDialog(true)
-    } finally {
-      setIsProcessing(false)
-      setCurrentProcessingIndex(0)
-      setTotalToProcess(0)
-      setCurrentProcessingFilename(null)
     }
-  }, [generateMetadata])
+  }, [generateMetadata, dispatch, metadata])
 
   const handleImageRemoved = useCallback((filename: string) => {
     // Remove metadata for the removed image
@@ -172,7 +158,7 @@ const Generator = (): React.JSX.Element => {
     URL.revokeObjectURL(url)
   }, [metadata])
 
-    const handleMetadataUpdated = useCallback((filename: string, updatedMetadata: { title: string; keywords: string[] }) => {
+  const handleMetadataUpdated = useCallback((filename: string, updatedMetadata: { title: string; keywords: string[] }) => {
     dispatch(updateMetadata({
       filename,
       title: updatedMetadata.title,
@@ -180,17 +166,15 @@ const Generator = (): React.JSX.Element => {
     }))
   }, [dispatch])
 
-
-
   return (
     <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-gray-900">
-      <div className="min-h-full w-full p-4 relative">
+      <div className="min-h-full w-full p-4 relative space-y-4">
         {/* Image Uploader - Only show if no files */}
-        {files.length === 0 && (
+        {files.length === 0 && !isLoading && (
           <div className="h-full flex items-center justify-center">
-        <ImageUploader
-          onFilesAccepted={handleFilesAccepted}
-              isProcessing={isProcessing || isLoading}
+            <ImageUploader
+              onFilesAccepted={handleFilesAccepted}
+              isProcessing={isLoading}
             />
           </div>
         )}
@@ -198,23 +182,24 @@ const Generator = (): React.JSX.Element => {
         {/* Uploaded Images Display - Only show if files exist */}
         {files.length > 0 && (
           <UploadedImagesDisplay
-          onClear={handleClear}
+            onClear={handleClear}
             onProcess={handleProcess}
             onFilesAccepted={handleFilesAccepted}
             onImageRemoved={handleImageRemoved}
             onImageSelected={handleImageSelected}
             selectedImageId={selectedImageId}
-            isProcessing={isProcessing || isLoading}
+            isProcessing={isLoading}
             hasMetadata={metadata.length > 0}
             metadataResults={metadata}
             onExportCSV={handleExportCSV}
-            processingProgress={isProcessing ? { current: currentProcessingIndex, total: totalToProcess } : undefined}
-            currentProcessingFilename={currentProcessingFilename}
+            processingProgress={processingProgress ? {
+              current: processingProgress.completed,
+              total: processingProgress.total
+            } : undefined}
+            currentProcessingFilename={processingProgress?.currentFilename || null}
             onMetadataUpdated={handleMetadataUpdated}
-        />
+          />
         )}
-
-
 
         {/* Error Dialog */}
         {showErrorDialog && (
@@ -238,12 +223,12 @@ const Generator = (): React.JSX.Element => {
                 >
                   Close
                 </button>
-              <button
-                onClick={handleRetry}
+                <button
+                  onClick={handleRetry}
                   className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
-              >
-                Retry
-              </button>
+                >
+                  Retry
+                </button>
               </div>
             </div>
           </div>

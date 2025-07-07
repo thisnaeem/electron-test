@@ -192,6 +192,87 @@
     background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
     background-size: 200% 100%;
   }
+
+  /* Splash Screen Animations */
+  @keyframes splashFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes splashLogoGlow {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(59, 130, 246, 0.3), 0 0 40px rgba(147, 51, 234, 0.2);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(59, 130, 246, 0.5), 0 0 80px rgba(147, 51, 234, 0.3);
+    }
+  }
+
+  @keyframes splashTextSlideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes splashParticleFloat {
+    0%, 100% {
+      transform: translateY(0px) translateX(0px);
+    }
+    25% {
+      transform: translateY(-10px) translateX(5px);
+    }
+    50% {
+      transform: translateY(-5px) translateX(-5px);
+    }
+    75% {
+      transform: translateY(-15px) translateX(10px);
+    }
+  }
+
+  .splash-fade-in {
+    animation: splashFadeIn 0.8s ease-out;
+  }
+
+  .splash-logo-glow {
+    animation: splashLogoGlow 2s ease-in-out infinite;
+  }
+
+  .splash-text-slide-up {
+    animation: splashTextSlideUp 0.6s ease-out 0.3s both;
+  }
+
+  .splash-particle-float {
+    animation: splashParticleFloat 4s ease-in-out infinite;
+  }
+
+  /* Metadata Panel Animation */
+  @keyframes metadataSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-10px) scale(0.98);
+      max-height: 0;
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+      max-height: 500px;
+    }
+  }
+
+  .metadata-slide-in {
+    animation: metadataSlideIn 0.3s ease-out forwards;
+  }
 }
 
 @layer utilities {

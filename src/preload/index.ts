@@ -31,10 +31,6 @@ const api = {
   deleteImagePreview: (filename: string) => ipcRenderer.invoke('delete-image-preview', filename),
   clearAllPreviews: () => ipcRenderer.invoke('clear-all-previews'),
 
-  // Authentication
-  googleLogin: () => ipcRenderer.invoke('google-login'),
-  logout: () => ipcRenderer.invoke('logout'),
-
   // Window control
   onWindowMaximized: (callback: () => void) => {
     const listener = () => callback()
