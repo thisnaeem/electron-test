@@ -22,6 +22,38 @@ interface SettingsState {
   // Multiple API keys
   apiKeys: ApiKeyInfo[]
   isValidatingAny: boolean
+
+  // Dark mode
+  isDarkMode: boolean
+}
+
+// Helper function to safely load API keys from localStorage
+const loadApiKeysFromStorage = (): ApiKeyInfo[] => {
+  try {
+    const stored = localStorage.getItem('geminiApiKeys')
+    console.log('📱 Loading API keys from localStorage:', stored)
+    if (!stored) {
+      console.log('📱 No API keys found in localStorage')
+      return []
+    }
+    const parsed = JSON.parse(stored)
+    console.log('📱 Parsed API keys:', parsed.length, 'keys found')
+    return Array.isArray(parsed) ? parsed : []
+  } catch (error) {
+    console.error('❌ Error loading API keys from localStorage:', error)
+    return []
+  }
+}
+
+// Helper function to safely save API keys to localStorage
+const saveApiKeysToStorage = (apiKeys: ApiKeyInfo[]): void => {
+  try {
+    const serialized = JSON.stringify(apiKeys)
+    localStorage.setItem('geminiApiKeys', serialized)
+    console.log('💾 Saved API keys to localStorage:', apiKeys.length, 'keys')
+  } catch (error) {
+    console.error('❌ Error saving API keys to localStorage:', error)
+  }
 }
 
 const initialState: SettingsState = {
@@ -32,8 +64,11 @@ const initialState: SettingsState = {
   validationError: null,
 
   // Multiple API keys
-  apiKeys: JSON.parse(localStorage.getItem('geminiApiKeys') || '[]'),
-  isValidatingAny: false
+  apiKeys: loadApiKeysFromStorage(),
+  isValidatingAny: false,
+
+  // Dark mode
+  isDarkMode: localStorage.getItem('darkMode') === 'true'
 }
 
 // Migrate legacy API key to new system if exists
@@ -179,19 +214,19 @@ const settingsSlice = createSlice({
         name: action.payload.name || `API Key ${state.apiKeys.length + 1}`
       }
       state.apiKeys.push(newKey)
-      localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+      saveApiKeysToStorage(state.apiKeys)
     },
 
     removeApiKey: (state, action: PayloadAction<string>) => {
       state.apiKeys = state.apiKeys.filter(key => key.id !== action.payload)
-      localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+      saveApiKeysToStorage(state.apiKeys)
     },
 
     updateApiKeyName: (state, action: PayloadAction<{ id: string; name: string }>) => {
       const key = state.apiKeys.find(k => k.id === action.payload.id)
       if (key) {
         key.name = action.payload.name
-        localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+        saveApiKeysToStorage(state.apiKeys)
       }
     },
 
@@ -200,7 +235,7 @@ const settingsSlice = createSlice({
       if (key) {
         key.requestCount++
         key.lastRequestTime = Date.now()
-        localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+        saveApiKeysToStorage(state.apiKeys)
       }
     },
 
@@ -208,7 +243,7 @@ const settingsSlice = createSlice({
       const key = state.apiKeys.find(k => k.id === action.payload)
       if (key) {
         key.requestCount = 0
-        localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+        saveApiKeysToStorage(state.apiKeys)
       }
     },
 
@@ -216,6 +251,31 @@ const settingsSlice = createSlice({
       const key = state.apiKeys.find(k => k.id === action.payload)
       if (key) {
         key.validationError = null
+      }
+    },
+
+    // Dark mode actions
+    toggleDarkMode: (state) => {
+      state.isDarkMode = !state.isDarkMode
+      localStorage.setItem('darkMode', state.isDarkMode.toString())
+
+      // Apply dark mode to document
+      if (state.isDarkMode) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+      }
+    },
+
+    setDarkMode: (state, action: PayloadAction<boolean>) => {
+      state.isDarkMode = action.payload
+      localStorage.setItem('darkMode', action.payload.toString())
+
+      // Apply dark mode to document
+      if (action.payload) {
+        document.documentElement.classList.add('dark')
+      } else {
+        document.documentElement.classList.remove('dark')
       }
     }
   },
@@ -255,7 +315,7 @@ const settingsSlice = createSlice({
 
         // Check if any keys are still validating
         state.isValidatingAny = state.apiKeys.some(k => k.isValidating)
-        localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+        saveApiKeysToStorage(state.apiKeys)
       })
       .addCase(validateMultipleApiKey.rejected, (state, action) => {
         const payload = action.payload as { id: string; error: string }
@@ -268,7 +328,7 @@ const settingsSlice = createSlice({
 
         // Check if any keys are still validating
         state.isValidatingAny = state.apiKeys.some(k => k.isValidating)
-        localStorage.setItem('geminiApiKeys', JSON.stringify(state.apiKeys))
+        saveApiKeysToStorage(state.apiKeys)
       })
   }
 })
@@ -281,7 +341,9 @@ export const {
   updateApiKeyName,
   incrementApiKeyUsage,
   resetApiKeyUsage,
-  clearApiKeyError
+  clearApiKeyError,
+  toggleDarkMode,
+  setDarkMode
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

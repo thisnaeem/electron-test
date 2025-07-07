@@ -109,6 +109,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 700,
+    minWidth: 800,  // Minimum width to prevent UI from breaking
+    minHeight: 600, // Minimum height to ensure proper layout
     show: false,
     autoHideMenuBar: true,
     frame: false, // Custom title bar

@@ -9,6 +9,8 @@ import Settings from './pages/Settings'
 import UpdateNotification from './components/UpdateNotification'
 import TitleBar from './components/TitleBar'
 import SplashScreen from './components/SplashScreen'
+import { useAppSelector, useAppDispatch } from './store/hooks'
+import { setDarkMode } from './store/slices/settingsSlice'
 
 // Separate component to use router hooks
 function AppContent(): React.JSX.Element {
@@ -20,7 +22,7 @@ function AppContent(): React.JSX.Element {
       <TitleBar />
       <div className="flex pt-10">
         <Sidebar />
-        <div className={`flex-1 overflow-auto transition-all duration-200 ml-20 ${isContentPage ? 'bg-white dark:bg-gray-900' : ''}`}>
+        <div className={`flex-1 overflow-auto transition-all duration-200 ml-20 ${isContentPage ? 'bg-white dark:bg-[#1a1b23]' : ''}`}>
           <div className="px-8 py-8">
             <Routes>
               <Route path="/" element={<Navigate to="/generator" replace />} />
@@ -36,10 +38,27 @@ function AppContent(): React.JSX.Element {
 }
 
 function App(): React.JSX.Element {
+  const dispatch = useAppDispatch()
+  const isDarkMode = useAppSelector(state => state.settings.isDarkMode)
   const [showSplash, setShowSplash] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
 
   useEffect(() => {
+    // Initialize dark mode from localStorage
+    const savedDarkMode = localStorage.getItem('darkMode') === 'true'
+
+    // Apply dark mode class immediately
+    if (savedDarkMode) {
+      document.documentElement.classList.add('dark')
+    } else {
+      document.documentElement.classList.remove('dark')
+    }
+
+    // Update Redux state if different from saved preference
+    if (isDarkMode !== savedDarkMode) {
+      dispatch(setDarkMode(savedDarkMode))
+    }
+
     // Check if splash screen should be shown
     const shouldShowSplash = (): boolean => {
       // Force show splash in development if URL contains ?splash=true
@@ -64,7 +83,7 @@ function App(): React.JSX.Element {
 
     setShowSplash(shouldShowSplash())
     setIsInitialized(true)
-  }, [])
+  }, [dispatch, isDarkMode])
 
   const handleSplashComplete = (): void => {
     setShowSplash(false)

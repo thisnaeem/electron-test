@@ -25,6 +25,8 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
   const [editingNameValue, setEditingNameValue] = useState('')
   const [isValidating, setIsValidating] = useState(false)
   const [duplicateError, setDuplicateError] = useState('')
+  const [showRemoveConfirmation, setShowRemoveConfirmation] = useState(false)
+  const [apiKeyToRemove, setApiKeyToRemove] = useState<{ id: string; name: string } | null>(null)
 
     const handleAddApiKey = useCallback(async () => {
     if (!newApiKey.trim()) return
@@ -78,11 +80,23 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
     setIsValidating(false)
   }, [newApiKey, newApiKeyName, apiKeys, dispatch])
 
-  const handleRemoveApiKey = useCallback((id: string) => {
-    if (window.confirm('Are you sure you want to remove this API key?')) {
-      dispatch(removeApiKey(id))
+  const handleRemoveApiKey = useCallback((id: string, name: string) => {
+    setApiKeyToRemove({ id, name })
+    setShowRemoveConfirmation(true)
+  }, [])
+
+  const confirmRemoveApiKey = useCallback(() => {
+    if (apiKeyToRemove) {
+      dispatch(removeApiKey(apiKeyToRemove.id))
+      setShowRemoveConfirmation(false)
+      setApiKeyToRemove(null)
     }
-  }, [dispatch])
+  }, [apiKeyToRemove, dispatch])
+
+  const cancelRemoveApiKey = useCallback(() => {
+    setShowRemoveConfirmation(false)
+    setApiKeyToRemove(null)
+  }, [])
 
 
 
@@ -122,7 +136,7 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
       {/* Header with stats */}
       <div className="flex justify-between items-center">
         <div>
-          <h3 className="text-xl font-medium mb-2">API Key Management</h3>
+          <h3 className="text-xl font-medium text-[#1a1b1e] dark:text-white mb-2">API Key Management</h3>
           <p className="text-sm text-gray-600 dark:text-gray-400">
             Manage multiple Gemini API keys for faster parallel processing.
             {apiKeys.length > 0 && (
@@ -237,7 +251,7 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
           <h4 className="font-medium text-gray-900 dark:text-gray-100">Your API Keys</h4>
 
           {apiKeys.map((apiKey) => (
-            <div key={apiKey.id} className="bg-[#f6f6f8] dark:bg-gray-800 rounded-xl p-4">
+            <div key={apiKey.id} className="bg-[#f6f6f8] dark:bg-[#2a2d3a] rounded-xl p-4">
               <div className="flex items-center justify-between">
                 <div className="flex-1 min-w-0">
                   {/* API Key Name */}
@@ -343,7 +357,7 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
                 {/* Actions */}
                 <div className="flex items-center gap-2 ml-4">
                   <button
-                    onClick={() => handleRemoveApiKey(apiKey.id)}
+                    onClick={() => handleRemoveApiKey(apiKey.id, apiKey.name)}
                     className="px-3 py-1.5 text-sm bg-red-50 hover:bg-red-100 text-red-700 rounded transition-colors"
                   >
                     Remove
@@ -380,6 +394,33 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
         </div>
       )}
 
+      {/* Remove Confirmation Modal */}
+      {showRemoveConfirmation && apiKeyToRemove && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              Remove API Key
+            </h3>
+            <p className="text-gray-600 dark:text-gray-400 mb-6">
+              Are you sure you want to remove &quot;{apiKeyToRemove.name}&quot;? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={cancelRemoveApiKey}
+                className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmRemoveApiKey}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   )

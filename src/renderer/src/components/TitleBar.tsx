@@ -46,7 +46,7 @@ const TitleBar = (): React.JSX.Element => {
 
   return (
     <div
-      className="fixed top-0 left-0 w-full z-50 flex items-center h-10 bg-white/90 dark:bg-gray-900/95 backdrop-blur-sm select-none border-b border-gray-100 dark:border-gray-800"
+      className="fixed top-0 left-0 w-full z-50 flex items-center h-10 bg-white/90 dark:bg-[#1a1b23]/95 backdrop-blur-sm select-none border-b border-gray-100 dark:border-[#383b4a]"
       style={{ WebkitAppRegion: 'drag' } as StyleWithWebkitAppRegion}
     >
       {/* App title */}
@@ -79,7 +79,7 @@ const TitleBar = (): React.JSX.Element => {
         <button
           onClick={openHelp}
           aria-label="Help"
-          className="flex items-center justify-center w-10 h-10 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full mx-1 transition-all duration-200"
+          className="flex items-center justify-center w-10 h-10 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#383b4a] rounded-full mx-1 transition-all duration-200"
           title="Help"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -98,7 +98,7 @@ const TitleBar = (): React.JSX.Element => {
         <button
           onClick={handleMinimize}
           aria-label="Minimize"
-          className="flex items-center justify-center w-12 h-10 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+          className="flex items-center justify-center w-12 h-10 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#383b4a] transition-all duration-200"
         >
           <svg width="12" height="1" viewBox="0 0 12 1">
             <path fill="currentColor" d="M0 0h12v1H0z"/>
@@ -108,7 +108,7 @@ const TitleBar = (): React.JSX.Element => {
         <button
           onClick={isMaximized ? handleUnmaximize : handleMaximize}
           aria-label={isMaximized ? "Restore" : "Maximize"}
-          className="flex items-center justify-center w-12 h-10 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
+          className="flex items-center justify-center w-12 h-10 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-[#383b4a] transition-all duration-200"
         >
           {isMaximized ? (
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -124,7 +124,7 @@ const TitleBar = (): React.JSX.Element => {
         <button
           onClick={handleClose}
           aria-label="Close"
-          className="flex items-center justify-center w-12 h-10 hover:bg-red-500 hover:text-white transition-all duration-200"
+          className="flex items-center justify-center w-12 h-10 text-gray-600 dark:text-gray-300 hover:bg-red-500 hover:text-white transition-all duration-200"
         >
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M2 2L10 10M10 2L2 10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>

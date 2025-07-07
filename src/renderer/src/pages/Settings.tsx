@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import ApiKeyManager from '../components/ApiKeyManager'
+import DarkModeToggle from '../components/DarkModeToggle'
 
 const Settings = (): React.JSX.Element => {
   const [checkingForUpdate, setCheckingForUpdate] = useState(false)
@@ -20,19 +21,39 @@ const Settings = (): React.JSX.Element => {
   }
 
   return (
-    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-gray-900">
+    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
       <div className="p-6 max-w-full">
-        <h2 className="text-3xl font-semibold mb-8">Settings</h2>
+        <h2 className="text-3xl font-semibold mb-8 text-gray-900 dark:text-white">Settings</h2>
 
         {/* API Key Management Section */}
         <div className="mb-10">
           <ApiKeyManager />
         </div>
 
+        {/* Appearance Section */}
+        <div className="mb-10 max-w-3xl">
+          <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Appearance</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
+            Customize the appearance of the application to match your preferences.
+          </p>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-4 bg-[#f6f6f8] dark:bg-[#2a2d3a] rounded-xl">
+              <div>
+                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Dark Mode</h4>
+                <p className="text-sm text-gray-500 dark:text-gray-300">
+                  Switch between light and dark themes
+                </p>
+              </div>
+              <DarkModeToggle showLabel={false} />
+            </div>
+          </div>
+        </div>
+
         {/* Updates Section */}
         <div className="mb-6 max-w-3xl">
-          <h3 className="text-xl font-medium mb-4">Application Updates</h3>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Application Updates</h3>
+          <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
             Check if a new version of the application is available. Updates help you get the latest features and bug fixes.
           </p>
 
@@ -40,7 +61,7 @@ const Settings = (): React.JSX.Element => {
             <button
               onClick={checkForUpdates}
               disabled={checkingForUpdate}
-              className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+              className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 dark:bg-[#2a2d3a] dark:hover:bg-[#383b4a] text-gray-800 dark:text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               {checkingForUpdate ? (
                 <>
@@ -61,7 +82,7 @@ const Settings = (): React.JSX.Element => {
             </button>
 
             {updateStatus && (
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-gray-600 dark:text-gray-300">
                 {updateStatus}
               </span>
             )}

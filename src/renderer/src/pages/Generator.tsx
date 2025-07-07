@@ -167,7 +167,7 @@ const Generator = (): React.JSX.Element => {
   }, [dispatch])
 
   return (
-    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-gray-900">
+    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
       <div className="min-h-full w-full p-4 relative space-y-4">
         {/* Image Uploader - Only show if no files */}
         {files.length === 0 && !isLoading && (
