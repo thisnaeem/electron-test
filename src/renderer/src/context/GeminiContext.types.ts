@@ -44,6 +44,9 @@ export interface GeminiContextType {
   // Enhanced metadata generation with parallel processing
   generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void) => Promise<MetadataResult[]>
 
+  // Stop metadata generation
+  stopGeneration: () => void
+
   // Processing state
   isLoading: boolean
   error: string | null

@@ -7,7 +7,7 @@ import ImageUploader from '../components/ImageUploader'
 import UploadedImagesDisplay from '../components/UploadedImagesDisplay'
 
 const Generator = (): React.JSX.Element => {
-  const { generateMetadata, isLoading, error, processingProgress } = useGemini()
+  const { generateMetadata, stopGeneration, isLoading, error, processingProgress } = useGemini()
   const dispatch = useAppDispatch()
   const { files, metadata } = useAppSelector(state => state.files)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
@@ -198,6 +198,7 @@ const Generator = (): React.JSX.Element => {
             } : undefined}
             currentProcessingFilename={processingProgress?.currentFilename || null}
             onMetadataUpdated={handleMetadataUpdated}
+            onStopGeneration={stopGeneration}
           />
         )}
 

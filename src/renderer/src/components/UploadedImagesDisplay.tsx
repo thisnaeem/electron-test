@@ -40,9 +40,10 @@ interface UploadedImagesDisplayProps {
   processingProgress?: { current: number; total: number }
   currentProcessingFilename?: string | null
   onMetadataUpdated?: (filename: string, updatedMetadata: { title: string; keywords: string[] }) => void
+  onStopGeneration?: () => void
 }
 
-const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onImageRemoved, onImageSelected, selectedImageId, hasMetadata, metadataResults, isProcessing, onExportCSV, processingProgress, currentProcessingFilename, onMetadataUpdated }: UploadedImagesDisplayProps): React.JSX.Element => {
+const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onImageRemoved, onImageSelected, selectedImageId, hasMetadata, metadataResults, isProcessing, onExportCSV, processingProgress, currentProcessingFilename, onMetadataUpdated, onStopGeneration }: UploadedImagesDisplayProps): React.JSX.Element => {
   const dispatch = useAppDispatch()
   const { files, isLoading } = useAppSelector(state => state.files)
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
@@ -502,20 +503,26 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
             Clear
           </button>
 
-          <button
-            onClick={handleGenerateMetadata}
-            disabled={isProcessing || isLoading || files.length === 0 || isProcessingFiles}
-            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {isProcessing ? (
-              <>
-                <div className="animate-spin h-4 w-4 border-2 border-gray-600 border-t-transparent rounded-full"></div>
-                {processingProgress ? `${processingProgress.current}/${processingProgress.total}` : 'Processing...'}
-              </>
-            ) : (
-              'Generate'
-            )}
-          </button>
+          {isProcessing ? (
+            <button
+              onClick={onStopGeneration}
+              className="px-6 py-2.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
+              </svg>
+              Stop ({processingProgress ? `${processingProgress.current}/${processingProgress.total}` : 'Processing...'})
+            </button>
+          ) : (
+            <button
+              onClick={handleGenerateMetadata}
+              disabled={isLoading || files.length === 0 || isProcessingFiles}
+              className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              Generate
+            </button>
+          )}
 
           {hasMetadata && onExportCSV && (
             <button
@@ -564,8 +571,8 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
             if (selectedFileIndex !== -1) {
               // Calculate the row of the selected image
               const selectedRow = Math.floor(selectedFileIndex / columnsCount)
-              // Insert metadata at the end of the selected row
-              metadataInsertPosition = (selectedRow + 1) * columnsCount
+              // Insert metadata at the end of the selected row, but ensure it doesn't exceed the file count
+              metadataInsertPosition = Math.min((selectedRow + 1) * columnsCount, files.length)
             }
           }
 

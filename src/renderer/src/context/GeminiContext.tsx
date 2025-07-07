@@ -35,6 +35,7 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
 
   // Use ref to track abort controller for cancelling requests
   const abortControllerRef = useRef<AbortController | null>(null)
+  const stopRequestedRef = useRef<boolean>(false)
 
   const generateMetadataForSingleImage = useCallback(async (
     imageInput: ImageInput,
@@ -62,7 +63,7 @@ Title: [A descriptive title in exactly 15 words]
 Keywords: [Exactly 45-46 relevant keywords separated by commas]
 
 Requirements:
-- Title must be exactly 15 words, descriptive and engaging, no extra characters must be one sentence only like most stock agency images has like adobe stock 
+- Title must be exactly 15 words, descriptive and engaging, no extra characters must be one sentence only like most stock agency images has like adobe stock
 - Keywords must be 45-46 items, relevant to the image content
 - Focus on objects, colors, style, mood, and context visible in the image
 - Use single words or short phrases for keywords
@@ -156,6 +157,7 @@ Respond with only the title and keywords in the specified format.`
 
     setIsLoading(true)
     setError(null)
+    stopRequestedRef.current = false // Reset stop flag for new generation
 
     // Initialize processing progress
     const initialProgress: ProcessingProgress = {
@@ -186,10 +188,22 @@ Respond with only the title and keywords in the specified format.`
     try {
       // Process images with controlled concurrency
       const processNextBatch = async (): Promise<void> => {
+        // Check if stop was requested
+        if (stopRequestedRef.current) {
+          console.log('🛑 Stop detected - halting batch processing')
+          return
+        }
+
         const batch: Promise<void>[] = []
 
         // Create batch of up to PARALLEL_LIMIT concurrent requests
         for (let i = 0; i < PARALLEL_LIMIT && currentIndex < input.length; i++) {
+          // Check if stop was requested before processing each image
+          if (stopRequestedRef.current) {
+            console.log('🛑 Stop detected - halting image processing loop')
+            break
+          }
+
           const imageIndex = currentIndex++
           const imageInput = input[imageIndex]
 
@@ -215,6 +229,12 @@ Respond with only the title and keywords in the specified format.`
               let lastError: Error | null = null
 
               while (retryCount <= MAX_RETRIES) {
+                // Check if stop was requested before each retry
+                if (stopRequestedRef.current) {
+                  console.log(`🛑 Stop detected - halting processing for ${imageInput.filename}`)
+                  return
+                }
+
                 try {
                   // Get current API key (might change on retry)
                   let currentApiKey = availableApiKey
@@ -351,10 +371,19 @@ Respond with only the title and keywords in the specified format.`
       return results.filter(result => result) // Filter out any undefined results
 
     } catch (error) {
-      console.error('Error in generateMetadata:', error)
-      setIsLoading(false)
-      setError(error instanceof Error ? error.message : 'Failed to generate metadata')
-      throw error
+      // Don't log error if it was a stop request
+      if (!stopRequestedRef.current) {
+        console.error('Error in generateMetadata:', error)
+        setIsLoading(false)
+        setError(error instanceof Error ? error.message : 'Failed to generate metadata')
+      }
+
+      if (!stopRequestedRef.current) {
+        throw error
+      }
+
+      // Return empty array if stopped
+      return []
     } finally {
       // Clean up
       abortControllerRef.current = null
@@ -376,6 +405,27 @@ Respond with only the title and keywords in the specified format.`
   const handleValidateApiKey = useCallback(async (id: string, key: string) => {
     await dispatch(validateMultipleApiKey({ id, key }))
   }, [dispatch])
+
+  // Stop generation function
+  const stopGeneration = useCallback(() => {
+    console.log('🛑 Stop requested - halting metadata generation')
+    stopRequestedRef.current = true
+
+    // Abort any ongoing requests
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+
+    // Reset loading state
+    setIsLoading(false)
+    setError('Generation stopped by user')
+
+    // Clear processing progress after a brief delay to show the stop
+    setTimeout(() => {
+      setProcessingProgress(null)
+      setError(null)
+    }, 1000)
+  }, [])
 
   // Statistics function
   const getApiKeyStats = useCallback(() => {
@@ -409,6 +459,7 @@ Respond with only the title and keywords in the specified format.`
 
     // Enhanced metadata generation
     generateMetadata,
+    stopGeneration,
 
     // Processing state
     isLoading,
