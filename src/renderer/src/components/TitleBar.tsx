@@ -41,7 +41,7 @@ const TitleBar = (): React.JSX.Element => {
   }
 
   const openHelp = (): void => {
-    window.electron?.ipcRenderer?.send('open-external-link', 'https://github.com/yourusername/csvgen-pro/wiki')
+    window.location.hash = '#/help'
   }
 
   return (

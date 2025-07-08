@@ -8,10 +8,13 @@ import YouTubeTranscriber from './pages/tools/YouTubeTranscriber'
 import FileConverter from './pages/tools/FileConverter'
 import PromptGenerator from './pages/tools/PromptGenerator'
 import FileProcessor from './pages/tools/FileProcessor'
+import MediaUpscaler from './pages/tools/MediaUpscaler'
+import AdobeScrapper from './pages/tools/AdobeScrapper'
 
 import { GeminiProvider } from './context/GeminiContext'
 import Sidebar from './components/Sidebar'
 import Settings from './pages/Settings'
+import Help from './pages/Help'
 import UpdateNotification from './components/UpdateNotification'
 import TitleBar from './components/TitleBar'
 import SplashScreen from './components/SplashScreen'
@@ -23,7 +26,7 @@ import analytics from './services/analytics'
 function AppContent(): React.JSX.Element {
   const location = useLocation()
   const { analyticsEnabled } = useAppSelector(state => state.settings)
-  const isContentPage = location.pathname === '/generator' || location.pathname === '/settings' || location.pathname === '/image-generator' || location.pathname === '/background-remover' || location.pathname === '/youtube-transcriber' || location.pathname === '/file-converter' || location.pathname === '/prompt-generator' || location.pathname === '/file-processor'
+  const isContentPage = location.pathname === '/generator' || location.pathname === '/settings' || location.pathname === '/help' || location.pathname === '/image-generator' || location.pathname === '/background-remover' || location.pathname === '/youtube-transcriber' || location.pathname === '/file-converter' || location.pathname === '/prompt-generator' || location.pathname === '/file-processor' || location.pathname === '/media-upscaler' || location.pathname === '/adobe-scrapper'
 
   // Track page views when location changes
   useEffect(() => {
@@ -90,7 +93,10 @@ function AppContent(): React.JSX.Element {
               <Route path="/file-converter" element={<FileConverter />} />
               <Route path="/prompt-generator" element={<PromptGenerator />} />
               <Route path="/file-processor" element={<FileProcessor />} />
+              <Route path="/media-upscaler" element={<MediaUpscaler />} />
+              <Route path="/adobe-scrapper" element={<AdobeScrapper />} />
               <Route path="/settings" element={<Settings />} />
+              <Route path="/help" element={<Help />} />
             </Routes>
           </div>
         </div>

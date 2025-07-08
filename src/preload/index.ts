@@ -1,6 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import { pythonApi } from './python-api'
 
 // Custom APIs for renderer
 const api = {
@@ -34,21 +33,7 @@ const api = {
     downloadImageFromUrl: (imageUrl: string, filename: string) =>
     ipcRenderer.invoke('download-image-from-url', imageUrl, filename),
 
-  // Background removal
-  removeBackground: (base64Data: string) => ipcRenderer.invoke('remove-background', base64Data),
 
-  // YouTube transcription
-  getYouTubeTranscript: (youtubeUrl: string, languageCodes?: string[]) => ipcRenderer.invoke('youtube-transcript', youtubeUrl, languageCodes),
-
-  // File conversion
-  convertFile: (inputFormat: string, outputFormat: string, base64Data: string, quality?: number) =>
-    ipcRenderer.invoke('convert-file', inputFormat, outputFormat, base64Data, quality),
-
-  // File processing
-  extractFilenames: (fileData: string, fileType: string, filename: string) =>
-    ipcRenderer.invoke('process-files', 'extract', { file_data: fileData, file_type: fileType, filename }),
-  cleanFilenames: (filenames: string[], options?: any) =>
-    ipcRenderer.invoke('process-files', 'clean', { filenames, options }),
 
   // Window control
   onWindowMaximized: (callback: () => void) => {
@@ -69,10 +54,7 @@ const api = {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   unmaximizeWindow: () => ipcRenderer.send('window-unmaximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
-  quitApp: () => ipcRenderer.send('app-quit'),
-
-  // Python API
-  python: pythonApi
+  quitApp: () => ipcRenderer.send('app-quit')
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

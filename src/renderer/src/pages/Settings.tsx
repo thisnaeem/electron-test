@@ -1,51 +1,31 @@
 import React, { useState, useEffect } from 'react'
 import ApiKeyManager from '../components/ApiKeyManager'
 import DarkModeToggle from '../components/DarkModeToggle'
+import { useAppSelector, useAppDispatch } from '../store/hooks'
+import { setTogetherApiKey, validateTogetherApiKey } from '../store/slices/settingsSlice'
 
-type SettingsSection = 'api' | 'appearance' | 'system' | 'updates'
+type SettingsSection = 'api' | 'appearance' | 'updates'
 
 const Settings = (): React.JSX.Element => {
+  const dispatch = useAppDispatch()
+  const {
+    togetherApiKey,
+    isTogetherApiKeyValid,
+    isValidatingTogetherApiKey,
+    togetherApiKeyValidationError
+  } = useAppSelector(state => state.settings)
+
   const [activeSection, setActiveSection] = useState<SettingsSection>('api')
   const [checkingForUpdate, setCheckingForUpdate] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<string>('')
-  const [togetherApiKey, setTogetherApiKey] = useState('')
-  const [isValidatingTogetherApiKey, setIsValidatingTogetherApiKey] = useState(false)
-  const [isTogetherApiKeyValid, setIsTogetherApiKeyValid] = useState(false)
-  const [togetherApiKeyValidationError, setTogetherApiKeyValidationError] = useState('')
-
-  useEffect(() => {
-    // Load saved Together AI API key
-    const savedKey = localStorage.getItem('togetherApiKey')
-    if (savedKey) {
-      setTogetherApiKey(savedKey)
-    }
-  }, [])
 
   const handleTogetherApiKeyChange = (value: string): void => {
-    setTogetherApiKey(value)
-    setIsTogetherApiKeyValid(false)
-    setTogetherApiKeyValidationError('')
-    // Save to localStorage
-    localStorage.setItem('togetherApiKey', value)
+    dispatch(setTogetherApiKey(value))
   }
 
   const handleValidateTogetherApiKey = (): void => {
     if (!togetherApiKey.trim()) return
-
-    setIsValidatingTogetherApiKey(true)
-    setTogetherApiKeyValidationError('')
-
-    // Simple validation - just check if it's not empty and has reasonable length
-    setTimeout(() => {
-      if (togetherApiKey.length > 10) {
-        setIsTogetherApiKeyValid(true)
-        setTogetherApiKeyValidationError('')
-      } else {
-        setIsTogetherApiKeyValid(false)
-        setTogetherApiKeyValidationError('API key appears to be invalid. Please check your key.')
-      }
-      setIsValidatingTogetherApiKey(false)
-    }, 1000)
+    dispatch(validateTogetherApiKey(togetherApiKey))
   }
 
   const checkForUpdates = async (): Promise<void> => {
@@ -114,15 +94,7 @@ const Settings = (): React.JSX.Element => {
         </svg>
       )
     },
-    {
-      id: 'system' as SettingsSection,
-      name: 'System',
-      icon: (
-        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-        </svg>
-      )
-    },
+
     {
       id: 'updates' as SettingsSection,
       name: 'Updates',
@@ -263,60 +235,7 @@ const Settings = (): React.JSX.Element => {
     </div>
   )
 
-  const renderSystemContent = () => (
-    <div className="space-y-8">
-      <div>
-        <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">System</h3>
-        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-          Configure system behavior and application settings.
-        </p>
 
-        <div className="space-y-4">
-          <div className="p-4 bg-[#f6f6f8] dark:bg-[#2a2d3a] rounded-xl">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h4 className="text-sm font-medium text-gray-900 dark:text-white">Launch at Startup</h4>
-                <p className="text-sm text-gray-500 dark:text-gray-300">
-                  Automatically start the application when you log in (enabled by default)
-                </p>
-              </div>
-              <div className="text-sm text-green-600 dark:text-green-400 font-medium">Enabled</div>
-            </div>
-
-            <div className="border-t border-gray-200 dark:border-gray-600 pt-4">
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-900 dark:text-white">Minimize to System Tray</h4>
-                  <p className="text-sm text-gray-500 dark:text-gray-300">
-                    When you close the window, the app minimizes to system tray instead of quitting
-                  </p>
-                </div>
-                <div className="text-sm text-green-600 dark:text-green-400 font-medium">Enabled</div>
-              </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                💡 Double-click the tray icon to show/hide the window. Right-click for options.
-              </p>
-            </div>
-
-            <div className="border-t border-gray-200 dark:border-gray-600 pt-4 mt-4">
-              <button
-                onClick={() => window.api.quitApp()}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Quit Application
-              </button>
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                This will completely close the application instead of minimizing to tray.
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 
   const renderUpdatesContent = () => (
     <div className="space-y-8">
@@ -361,18 +280,16 @@ const Settings = (): React.JSX.Element => {
   )
 
   const renderContent = () => {
-    switch (activeSection) {
-      case 'api':
-        return renderApiContent()
-      case 'appearance':
-        return renderAppearanceContent()
-      case 'system':
-        return renderSystemContent()
-      case 'updates':
-        return renderUpdatesContent()
-      default:
-        return renderApiContent()
-    }
+          switch (activeSection) {
+        case 'api':
+          return renderApiContent()
+        case 'appearance':
+          return renderAppearanceContent()
+        case 'updates':
+          return renderUpdatesContent()
+        default:
+          return renderApiContent()
+      }
   }
 
   return (

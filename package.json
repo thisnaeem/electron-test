@@ -1,7 +1,7 @@
 {
   "name": "csvgen-pro",
-  "version": "1.0.13",
-  "description": "An Electron application with React and TypeScript",
+  "version": "1.1.0",
+  "description": "CSVGen Pro",
   "main": "./out/main/index.js",
   "author": "example.com",
   "homepage": "https://electron-vite.org",
@@ -14,8 +14,8 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps && node scripts/python-setup.js",
-    "prebuild": "node scripts/prebuild.js",
+    "postinstall": "electron-builder install-app-deps",
+
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
@@ -24,8 +24,7 @@
     "publish:win": "npm run build && electron-builder --win --publish=always",
     "publish:mac": "npm run build && electron-builder --mac --publish=always",
     "publish:linux": "npm run build && electron-builder --linux --publish=always",
-    "publish:all": "npm run build && electron-builder -mwl --publish=always",
-    "setup-python": "node scripts/python-setup.js"
+    "publish:all": "npm run build && electron-builder -mwl --publish=always"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",
@@ -33,7 +32,7 @@
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.11.1",
     "@reduxjs/toolkit": "^2.8.2",
-    "auto-launch": "^5.0.6",
+
     "dotenv": "^17.0.1",
     "electron-log": "^5.1.2",
     "electron-updater": "^6.3.9",

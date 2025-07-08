@@ -4,20 +4,16 @@ directories:
   buildResources: build
 files:
   - 'out/**/*'
-  - 'scripts/**/*'
-  - 'requirements.txt'
-  - 'build/install-python.ps1'
   - 'package.json'
   - '!**/.vscode/*'
   - '!src/*'
-  - '!python-runtime/**'
+  - '!scripts/**'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
-  - scripts/**
 win:
   executableName: csvgen-pro
 nsis:
@@ -25,7 +21,6 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
-  include: build/installer.nsh
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
