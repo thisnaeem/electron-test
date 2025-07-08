@@ -515,13 +515,13 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
               Stop ({processingProgress ? `${processingProgress.current}/${processingProgress.total}` : 'Processing...'})
             </button>
           ) : (
-            <button
-              onClick={handleGenerateMetadata}
+          <button
+            onClick={handleGenerateMetadata}
               disabled={isLoading || files.length === 0 || isProcessingFiles}
-              className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
+            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
               Generate
-            </button>
+          </button>
           )}
 
           {hasMetadata && onExportCSV && (
@@ -578,139 +578,139 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
           // Render images and insert metadata at calculated position
           files.forEach((file, index) => {
-            const isSelected = selectedImageId === file.id
-            const hasFileMetadata = metadataResults?.some(result => result.filename === file.name) || false
-            const isCurrentlyProcessing = currentProcessingFilename === file.name
+          const isSelected = selectedImageId === file.id
+          const hasFileMetadata = metadataResults?.some(result => result.filename === file.name) || false
+          const isCurrentlyProcessing = currentProcessingFilename === file.name
 
             // Add image to render queue
             itemsToRender.push(
-              <div
-                key={file.id}
-                className={`relative aspect-square group cursor-pointer transition-all duration-200 ${
-                  isSelected
-                    ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-800'
-                    : hasFileMetadata
-                      ? 'hover:ring-2 hover:ring-blue-300 hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-gray-800'
-                      : ''
-                }`}
-                onClick={() => {
-                  if (hasFileMetadata && onImageSelected && !isCurrentlyProcessing) {
-                    onImageSelected(file.id)
-                  }
-                }}
-              >
-                <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl flex items-center justify-center overflow-hidden">
-                  {isCurrentlyProcessing ? (
-                    /* Enhanced skeleton loading placeholder */
-                    <div className="w-full h-full rounded-2xl overflow-hidden relative bg-gray-100 dark:bg-gray-800 skeleton-wrapper">
-                      {/* Main shimmer overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent animate-[shimmer_2.5s_ease-in-out_infinite] bg-[length:200%_100%] z-10"></div>
+            <div
+              key={file.id}
+              className={`relative aspect-square group cursor-pointer transition-all duration-200 ${
+                isSelected
+                  ? 'ring-2 ring-blue-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-800'
+                  : hasFileMetadata
+                    ? 'hover:ring-2 hover:ring-blue-300 hover:ring-offset-2 hover:ring-offset-white dark:hover:ring-offset-gray-800'
+                    : ''
+              }`}
+              onClick={() => {
+                if (hasFileMetadata && onImageSelected && !isCurrentlyProcessing) {
+                  onImageSelected(file.id)
+                }
+              }}
+            >
+              <div className="w-full h-full bg-gray-200 dark:bg-gray-700 rounded-2xl flex items-center justify-center overflow-hidden">
+                {isCurrentlyProcessing ? (
+                  /* Enhanced skeleton loading placeholder */
+                  <div className="w-full h-full rounded-2xl overflow-hidden relative bg-gray-100 dark:bg-gray-800 skeleton-wrapper">
+                    {/* Main shimmer overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 dark:via-white/10 to-transparent animate-[shimmer_2.5s_ease-in-out_infinite] bg-[length:200%_100%] z-10"></div>
 
-                      {/* Skeleton content structure */}
-                      <div className="absolute inset-0 p-3 flex flex-col justify-between">
-                        {/* Top section with image icon skeleton */}
-                        <div className="flex justify-center pt-2">
-                          <div className="w-6 h-6 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite]"></div>
-                        </div>
-
-                        {/* Middle section with content blocks */}
-                        <div className="flex-1 flex flex-col justify-center items-center space-y-2">
-                          <div className="w-16 h-3 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite] delay-200"></div>
-                          <div className="w-12 h-2 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite] delay-400"></div>
-                          <div className="w-20 h-2 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite] delay-600"></div>
-                        </div>
+                    {/* Skeleton content structure */}
+                    <div className="absolute inset-0 p-3 flex flex-col justify-between">
+                      {/* Top section with image icon skeleton */}
+                      <div className="flex justify-center pt-2">
+                        <div className="w-6 h-6 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite]"></div>
                       </div>
 
-                      {/* Subtle border animation */}
-                      <div className="absolute inset-0 rounded-2xl border-2 border-transparent bg-gradient-to-r from-blue-200/50 via-transparent to-blue-200/50 dark:from-blue-500/30 dark:to-blue-500/30 animate-[shimmer_3s_ease-in-out_infinite] bg-[length:200%_100%] pointer-events-none"></div>
+                      {/* Middle section with content blocks */}
+                      <div className="flex-1 flex flex-col justify-center items-center space-y-2">
+                        <div className="w-16 h-3 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite] delay-200"></div>
+                        <div className="w-12 h-2 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite] delay-400"></div>
+                        <div className="w-20 h-2 bg-gray-300 dark:bg-gray-600 rounded animate-[skeletonPulse_1.8s_ease-in-out_infinite] delay-600"></div>
+                      </div>
                     </div>
-                  ) : file.previewData ? (
-                    <img
-                      src={file.previewData}
-                      alt={file.name}
-                      className="w-full h-full object-cover rounded-2xl"
-                      loading="lazy"
-                      decoding="async"
-                    />
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-3">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2z" />
-                      </svg>
-                      <span className="text-xs text-gray-500 dark:text-gray-400 text-center break-all">{file.name}</span>
-                    </div>
-                  )}
-                </div>
 
-                {/* Selection indicator */}
-                {isSelected && (
-                  <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-1 shadow-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
+                    {/* Subtle border animation */}
+                    <div className="absolute inset-0 rounded-2xl border-2 border-transparent bg-gradient-to-r from-blue-200/50 via-transparent to-blue-200/50 dark:from-blue-500/30 dark:to-blue-500/30 animate-[shimmer_3s_ease-in-out_infinite] bg-[length:200%_100%] pointer-events-none"></div>
                   </div>
-                )}
-
-                {/* Metadata available indicator - Always visible green checkmark */}
-                {hasFileMetadata && !isSelected && (
-                  <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1 shadow-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                ) : file.previewData ? (
+                  <img
+                    src={file.previewData}
+                    alt={file.name}
+                    className="w-full h-full object-cover rounded-2xl"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 002 2z" />
                     </svg>
+                    <span className="text-xs text-gray-500 dark:text-gray-400 text-center break-all">{file.name}</span>
                   </div>
-                )}
-
-                {/* Overlay with remove button - Hidden when processing */}
-                {!isCurrentlyProcessing && (
-                  <>
-                    <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 rounded-2xl flex items-center justify-center">
-                      <Tooltip text="Double-click to delete">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            // Double-click confirmation to prevent accidental deletion
-                            if (e.detail === 2) {
-                              handleRemoveImage(file.id)
-                            }
-                          }}
-                          onDoubleClick={(e) => {
-                            e.stopPropagation()
-                            handleRemoveImage(file.id)
-                          }}
-                          className="opacity-0 group-hover:opacity-100 relative bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white p-2 rounded-full hover:from-red-600 hover:via-red-700 hover:to-red-800 transition-all duration-200 shadow-lg hover:shadow-red-500/30 overflow-hidden"
-                          type="button"
-                          aria-label="Double-click to remove image"
-                          disabled={isProcessing || isLoading}
-                        >
-                          {/* Bleed/shine effect */}
-                          <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
-                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" color="currentColor" fill="none" className="relative z-10">
-                            <path d="M19.5 5.5L18.8803 15.5251C18.7219 18.0864 18.6428 19.3671 18.0008 20.2879C17.6833 20.7431 17.2747 21.1273 16.8007 21.416C15.8421 22 14.559 22 11.9927 22C9.42312 22 8.1383 22 7.17905 21.4149C6.7048 21.1257 6.296 20.7408 5.97868 20.2848C5.33688 19.3626 5.25945 18.0801 5.10461 15.5152L4.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            <path d="M9 11.7349H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            <path d="M10.5 15.6543H13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            <path d="M3 5.5H21M16.0555 5.5L15.3729 4.09173C14.9194 3.15626 14.6926 2.68852 14.3015 2.39681C14.2148 2.3321 14.1229 2.27454 14.0268 2.2247C13.5937 2 13.0739 2 12.0343 2C10.9686 2 10.4358 2 9.99549 2.23412C9.89791 2.28601 9.80479 2.3459 9.7171 2.41317C9.32145 2.7167 9.10044 3.20155 8.65842 4.17126L8.05273 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                          </svg>
-                        </button>
-                      </Tooltip>
-                    </div>
-
-                    {/* File info tooltip */}
-                    <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <p className="truncate">{file.name}</p>
-                      <p className="text-gray-300">{(file.size / 1024).toFixed(1)} KB</p>
-                    </div>
-                  </>
                 )}
               </div>
-            )
+
+              {/* Selection indicator */}
+              {isSelected && (
+                <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full p-1 shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+
+              {/* Metadata available indicator - Always visible green checkmark */}
+              {hasFileMetadata && !isSelected && (
+                <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1 shadow-lg">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              )}
+
+              {/* Overlay with remove button - Hidden when processing */}
+              {!isCurrentlyProcessing && (
+                <>
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-40 transition-all duration-200 rounded-2xl flex items-center justify-center">
+                    <Tooltip text="Double-click to delete">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // Double-click confirmation to prevent accidental deletion
+                          if (e.detail === 2) {
+                            handleRemoveImage(file.id)
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation()
+                          handleRemoveImage(file.id)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 relative bg-gradient-to-br from-red-500 via-red-600 to-red-700 text-white p-2 rounded-full hover:from-red-600 hover:via-red-700 hover:to-red-800 transition-all duration-200 shadow-lg hover:shadow-red-500/30 overflow-hidden"
+                        type="button"
+                        aria-label="Double-click to remove image"
+                        disabled={isProcessing || isLoading}
+                      >
+                        {/* Bleed/shine effect */}
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16" color="currentColor" fill="none" className="relative z-10">
+                          <path d="M19.5 5.5L18.8803 15.5251C18.7219 18.0864 18.6428 19.3671 18.0008 20.2879C17.6833 20.7431 17.2747 21.1273 16.8007 21.416C15.8421 22 14.559 22 11.9927 22C9.42312 22 8.1383 22 7.17905 21.4149C6.7048 21.1257 6.296 20.7408 5.97868 20.2848C5.33688 19.3626 5.25945 18.0801 5.10461 15.5152L4.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M9 11.7349H15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M10.5 15.6543H13.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          <path d="M3 5.5H21M16.0555 5.5L15.3729 4.09173C14.9194 3.15626 14.6926 2.68852 14.3015 2.39681C14.2148 2.3321 14.1229 2.27454 14.0268 2.2247C13.5937 2 13.0739 2 12.0343 2C10.9686 2 10.4358 2 9.99549 2.23412C9.89791 2.28601 9.80479 2.3459 9.7171 2.41317C9.32145 2.7167 9.10044 3.20155 8.65842 4.17126L8.05273 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                        </svg>
+                      </button>
+                    </Tooltip>
+                  </div>
+
+                  {/* File info tooltip */}
+                  <div className="absolute bottom-2 left-2 right-2 bg-black bg-opacity-75 text-white text-xs p-2 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                    <p className="truncate">{file.name}</p>
+                    <p className="text-gray-300">{(file.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </>
+              )}
+            </div>
+          )
 
             // Insert metadata panel after the selected row is complete
             if (metadataInsertPosition !== -1 && index === metadataInsertPosition - 1) {
-              const selectedFile = files.find(file => file.id === selectedImageId)
+        const selectedFile = files.find(file => file.id === selectedImageId)
               if (selectedFile && metadataResults) {
-                const metadata = metadataResults.find(result => result.filename === selectedFile.name)
+        const metadata = metadataResults.find(result => result.filename === selectedFile.name)
                 if (metadata) {
-                  const currentKeywords = getKeywordsForFile(metadata.filename)
+        const currentKeywords = getKeywordsForFile(metadata.filename)
 
                                      itemsToRender.push(
                      <div
@@ -720,141 +720,141 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                          gridColumn: '1 / -1'
                        }}
                      >
-                      {/* Close button */}
+            {/* Close button */}
+            <button
+              onClick={() => {
+                if (onImageSelected) {
+                  onImageSelected('') // Clear selection to close metadata
+                }
+              }}
+              className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
+              aria-label="Close metadata"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+                      {/* Metadata content */}
+            <div className="space-y-4">
+              <div>
+                <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Filename:</h5>
+                <p className="text-sm text-gray-900 dark:text-white font-mono bg-gray-50 dark:bg-gray-800 p-2 rounded">
+                  {metadata.filename}
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">Title:</h5>
+                  <button
+                    onClick={() => handleCopyTitle(metadata.title, metadata.filename)}
+                    className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                  >
+                    {copyFeedback?.type === 'title' && copyFeedback.filename === metadata.filename ? (
+                      <>
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+                <p className="text-sm text-gray-900 dark:text-white leading-relaxed">
+                  {metadata.title}
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Keywords ({currentKeywords.length}):
+                  </h5>
+                  <button
+                    onClick={() => handleCopyKeywords(currentKeywords, metadata.filename)}
+                    className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                  >
+                    {copyFeedback?.type === 'keywords' && copyFeedback.filename === metadata.filename ? (
+                      <>
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Copied!
+                      </>
+                    ) : (
+                      <>
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                        Copy
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {currentKeywords.map((keyword, index) => (
+                    <div
+                      key={index}
+                      draggable
+                      onDragStart={() => handleDragStart(metadata.filename, index)}
+                      onDragOver={handleDragOver}
+                      onDrop={(e) => handleDrop(e, metadata.filename, index)}
+                      className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 cursor-move hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors group"
+                    >
+                      <span className="mr-1">{keyword}</span>
                       <button
-                        onClick={() => {
-                          if (onImageSelected) {
-                            onImageSelected('') // Clear selection to close metadata
-                          }
-                        }}
-                        className="absolute top-4 right-4 p-1.5 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
-                        aria-label="Close metadata"
+                        onClick={() => handleRemoveKeyword(metadata.filename, index)}
+                        className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 transition-opacity"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </button>
-
-                      {/* Metadata content */}
-                      <div className="space-y-4">
-                        <div>
-                          <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Filename:</h5>
-                          <p className="text-sm text-gray-900 dark:text-white font-mono bg-gray-50 dark:bg-gray-800 p-2 rounded">
-                            {metadata.filename}
-                          </p>
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">Title:</h5>
-                            <button
-                              onClick={() => handleCopyTitle(metadata.title, metadata.filename)}
-                              className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-                            >
-                              {copyFeedback?.type === 'title' && copyFeedback.filename === metadata.filename ? (
-                                <>
-                                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                  </svg>
-                                  Copy
-                                </>
-                              )}
-                            </button>
-                          </div>
-                          <p className="text-sm text-gray-900 dark:text-white leading-relaxed">
-                            {metadata.title}
-                          </p>
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                              Keywords ({currentKeywords.length}):
-                            </h5>
-                            <button
-                              onClick={() => handleCopyKeywords(currentKeywords, metadata.filename)}
-                              className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
-                            >
-                              {copyFeedback?.type === 'keywords' && copyFeedback.filename === metadata.filename ? (
-                                <>
-                                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                  </svg>
-                                  Copied!
-                                </>
-                              ) : (
-                                <>
-                                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                  </svg>
-                                  Copy
-                                </>
-                              )}
-                            </button>
-                          </div>
-
-                          <div className="flex flex-wrap gap-2 mb-3">
-                            {currentKeywords.map((keyword, index) => (
-                              <div
-                                key={index}
-                                draggable
-                                onDragStart={() => handleDragStart(metadata.filename, index)}
-                                onDragOver={handleDragOver}
-                                onDrop={(e) => handleDrop(e, metadata.filename, index)}
-                                className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 cursor-move hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors group"
-                              >
-                                <span className="mr-1">{keyword}</span>
-                                <button
-                                  onClick={() => handleRemoveKeyword(metadata.filename, index)}
-                                  className="opacity-0 group-hover:opacity-100 text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-300 transition-opacity"
-                                >
-                                  <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                  </svg>
-                                </button>
-                              </div>
-                            ))}
-                          </div>
-
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={newKeyword}
-                              onChange={(e) => setNewKeyword(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  handleAddKeyword(metadata.filename)
-                                }
-                              }}
-                              placeholder="Add new keyword..."
-                              className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            />
-                            <button
-                              onClick={() => handleAddKeyword(metadata.filename)}
-                              disabled={!newKeyword.trim()}
-                              className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        </div>
-                      </div>
                     </div>
-                  )
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newKeyword}
+                    onChange={(e) => setNewKeyword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleAddKeyword(metadata.filename)
+                      }
+                    }}
+                    placeholder="Add new keyword..."
+                    className="flex-1 px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={() => handleAddKeyword(metadata.filename)}
+                    disabled={!newKeyword.trim()}
+                    className="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
                 }
               }
             }
           })
 
           return itemsToRender
-        })()}
+      })()}
       </div>
 
       {/* Clear Confirmation Modal */}

@@ -6,7 +6,9 @@ import {
   ProcessingProgress,
   MetadataResult,
   ImageInput,
-  GeminiContextType
+  GeminiContextType,
+  PromptGenerationRequest,
+  PromptGenerationResult
 } from './GeminiContext.types'
 import {
   addApiKey,
@@ -44,10 +46,10 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
     const { imageData, filename } = imageInput
 
     try {
-      // Check if base64 data is valid
-      if (!imageData || !imageData.includes(',')) {
-        throw new Error('Invalid image data')
-      }
+            // Check if base64 data is valid
+            if (!imageData || !imageData.includes(',')) {
+              throw new Error('Invalid image data')
+            }
 
       // Record API usage for rate limiting
       rateLimiter.recordRequest(apiKeyInfo.id)
@@ -57,7 +59,7 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
       const modelName = 'gemini-2.0-flash'
       const model = genAI.getGenerativeModel({ model: modelName })
 
-      const prompt = `Analyze this image and provide metadata in the following exact format:
+            const prompt = `Analyze this image and provide metadata in the following exact format:
 
 Title: [A descriptive title in exactly 15 words]
 Keywords: [Exactly 45-46 relevant keywords separated by commas]
@@ -71,40 +73,40 @@ Requirements:
 
 Respond with only the title and keywords in the specified format.`
 
-      const content: (string | Part)[] = [
-        prompt,
-        {
-          inlineData: {
-            mimeType: 'image/jpeg',
-            data: imageData.split(',')[1]
-          }
-        }
-      ]
+            const content: (string | Part)[] = [
+              prompt,
+              {
+                inlineData: {
+                  mimeType: 'image/jpeg',
+                  data: imageData.split(',')[1]
+                }
+              }
+            ]
 
-      const result = await model.generateContent(content)
-      const response = result.response
-      const text = response.text()
+            const result = await model.generateContent(content)
+            const response = result.response
+            const text = response.text()
 
-      if (!text || text.trim().length === 0) {
-        throw new Error('Empty response from Gemini API')
-      }
+            if (!text || text.trim().length === 0) {
+              throw new Error('Empty response from Gemini API')
+            }
 
-      // Parse the response
-      const lines = text.split('\n').filter(line => line.trim())
-      let title = ''
-      let keywords: string[] = []
+            // Parse the response
+            const lines = text.split('\n').filter(line => line.trim())
+            let title = ''
+            let keywords: string[] = []
 
-      for (const line of lines) {
-        if (line.toLowerCase().includes('title:')) {
-          title = line.replace(/title:/i, '').trim()
-        } else if (line.toLowerCase().includes('keywords:')) {
-          keywords = line
-            .replace(/keywords:/i, '')
-            .split(',')
-            .map(k => k.trim())
-            .filter(k => k)
-        }
-      }
+            for (const line of lines) {
+              if (line.toLowerCase().includes('title:')) {
+                title = line.replace(/title:/i, '').trim()
+              } else if (line.toLowerCase().includes('keywords:')) {
+                keywords = line
+                  .replace(/keywords:/i, '')
+                  .split(',')
+                  .map(k => k.trim())
+                  .filter(k => k)
+              }
+            }
 
       // Validate response quality - if parsing failed or response is poor, throw error to retry
       if (!title || title.includes('Generated title for')) {
@@ -115,9 +117,9 @@ Respond with only the title and keywords in the specified format.`
       }
 
       return {
-        filename,
-        title,
-        keywords
+              filename,
+              title,
+              keywords
       }
 
     } catch (error) {
@@ -427,6 +429,229 @@ Respond with only the title and keywords in the specified format.`
     }, 1000)
   }, [])
 
+  // Prompt generation function
+  const generatePrompts = useCallback(async (request: PromptGenerationRequest): Promise<PromptGenerationResult> => {
+    const validApiKeys = apiKeys.filter(key => key.isValid)
+
+    if (validApiKeys.length === 0) {
+      // Fallback to legacy single API key if no valid multiple keys
+      if (!apiKey || !isApiKeyValid) {
+        return {
+          prompts: [],
+          platform: request.platform,
+          style: request.style,
+          promptType: request.promptType,
+          success: false,
+          error: 'No valid API keys available. Please add and validate API keys in Settings.'
+        }
+      }
+    }
+
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Use the first available valid API key
+      const apiKeyToUse = validApiKeys.length > 0 ? validApiKeys[0] : {
+        id: 'legacy',
+        key: apiKey,
+        isValid: isApiKeyValid,
+        name: 'Legacy API Key'
+      } as ApiKeyInfo
+
+      const genAI = new GoogleGenerativeAI(apiKeyToUse.key)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+
+      // Create platform-specific prompt templates
+      const platformPrompts = {
+        'midjourney': {
+          image: `Create ${request.count} detailed Midjourney prompts for generating images. Each prompt should be optimized for Midjourney's AI and include specific style parameters, aspect ratios, and quality settings.`,
+          video: `Create ${request.count} detailed Midjourney prompts for generating video content. Include camera movements, lighting, and cinematic elements.`
+        },
+        'recraft': {
+          image: `Create ${request.count} detailed Recraft AI prompts for generating images. Focus on precise style descriptions, color palettes, and artistic techniques that work well with Recraft.`,
+          video: `Create ${request.count} detailed Recraft AI prompts for generating video content. Include animation style, transitions, and visual effects.`
+        },
+        'ideogram': {
+          image: `Create ${request.count} detailed Ideogram prompts for generating images. Include specific art styles, composition details, and visual elements that work well with Ideogram.`,
+          video: `Create ${request.count} detailed Ideogram prompts for generating video content. Focus on motion, timing, and visual storytelling elements.`
+        },
+        'dalle': {
+          image: `Create ${request.count} detailed DALL-E prompts for generating images. Use clear, descriptive language that works well with DALL-E's image generation capabilities.`,
+          video: `Create ${request.count} detailed prompts for video generation. Include scene descriptions, movement, and visual composition.`
+        },
+        'leonardo': {
+          image: `Create ${request.count} detailed Leonardo AI prompts for generating images. Include artistic styles, lighting, and composition details optimized for Leonardo.`,
+          video: `Create ${request.count} detailed Leonardo AI prompts for generating video content. Focus on cinematic quality and visual storytelling.`
+        },
+        'stable-diffusion': {
+          image: `Create ${request.count} detailed Stable Diffusion prompts for generating images. Include specific style tags, quality modifiers, and technical parameters.`,
+          video: `Create ${request.count} detailed prompts for video generation using Stable Diffusion. Include motion descriptions and temporal consistency elements.`
+        }
+      }
+
+      // Build the main prompt
+      const platformTemplate = platformPrompts[request.platform]?.[request.promptType] ||
+        `Create ${request.count} detailed AI prompts for generating ${request.promptType} content.`
+
+      let mainPrompt = `${platformTemplate}
+
+Base concept: "${request.input}"
+Style preference: ${request.style}
+Platform: ${request.platform}
+
+Requirements:
+- Each prompt should be unique and creative
+- Include specific style, mood, and technical details
+- Optimize for ${request.platform} platform capabilities
+- Make prompts detailed enough to generate high-quality results
+- Return exactly ${request.count} prompts
+- Number each prompt (1., 2., 3., etc.)
+- Focus on ${request.style} style elements
+
+`
+
+      // Add image analysis for image-to-prompt
+      if (request.inputType === 'image' && request.imageData) {
+        mainPrompt += `\nAnalyze the provided image and create prompts that would generate similar ${request.promptType} content with the specified style variations.`
+      }
+
+      const content: (string | { inlineData: { mimeType: string; data: string } })[] = [mainPrompt]
+
+      // Add image data if provided
+      if (request.inputType === 'image' && request.imageData) {
+        content.push({
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: request.imageData.split(',')[1]
+          }
+        })
+      }
+
+      const result = await model.generateContent(content)
+      const response = result.response
+      const text = response.text()
+
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from Gemini API')
+      }
+
+      // Parse the response to extract numbered prompts
+      const lines = text.split('\n').filter(line => line.trim())
+      const prompts: string[] = []
+
+      for (const line of lines) {
+        // Look for numbered prompts (1., 2., 3., etc.)
+        const match = line.match(/^\d+\.\s*(.+)/)
+        if (match) {
+          prompts.push(match[1].trim())
+        }
+      }
+
+      // If numbered parsing failed, try to split by lines and clean up
+      if (prompts.length === 0) {
+        const cleanedLines = lines
+          .filter(line => line.length > 20) // Filter out short lines
+          .slice(0, request.count) // Take only requested count
+        prompts.push(...cleanedLines)
+      }
+
+      // Record API usage
+      rateLimiter.recordRequest(apiKeyToUse.id)
+      if (validApiKeys.length > 0) {
+        dispatch(incrementApiKeyUsage(apiKeyToUse.id))
+      }
+
+      setIsLoading(false)
+
+      return {
+        prompts: prompts.slice(0, request.count), // Ensure we don't exceed requested count
+        platform: request.platform,
+        style: request.style,
+        promptType: request.promptType,
+        success: true
+      }
+
+    } catch (error) {
+      console.error('Error generating prompts:', error)
+      setIsLoading(false)
+      setError(error instanceof Error ? error.message : 'Failed to generate prompts')
+
+      return {
+        prompts: [],
+        platform: request.platform,
+        style: request.style,
+        promptType: request.promptType,
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to generate prompts'
+      }
+    }
+  }, [apiKeys, apiKey, isApiKeyValid, dispatch])
+
+  // Prompt enhancement function
+  const enhancePrompt = useCallback(async (originalPrompt: string): Promise<string> => {
+    const validApiKeys = apiKeys.filter(key => key.isValid)
+
+    if (validApiKeys.length === 0) {
+      // Fallback to legacy single API key if no valid multiple keys
+      if (!apiKey || !isApiKeyValid) {
+        throw new Error('No valid API keys available. Please add and validate API keys in Settings.')
+      }
+    }
+
+    try {
+      setIsLoading(true)
+      setError(null)
+
+      // Use the first available valid API key
+      const apiKeyToUse = validApiKeys.length > 0 ? validApiKeys[0] : {
+        id: 'legacy',
+        key: apiKey,
+        isValid: isApiKeyValid,
+        name: 'Legacy API Key'
+      } as ApiKeyInfo
+
+      const genAI = new GoogleGenerativeAI(apiKeyToUse.key)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+
+      const enhancementPrompt = `Enhance this image generation prompt to make it more detailed and effective for AI image generation:
+
+Original prompt: "${originalPrompt}"
+
+Please improve it by:
+- Adding specific visual details (lighting, composition, style)
+- Including quality modifiers (high resolution, detailed, professional)
+- Enhancing artistic direction (mood, atmosphere, color palette)
+- Adding technical parameters that improve image quality
+- Keeping the core concept but making it much more descriptive
+
+Return only the enhanced prompt, nothing else. Make it concise but highly detailed.`
+
+      const result = await model.generateContent(enhancementPrompt)
+      const response = result.response
+      const enhancedText = response.text()
+
+      if (!enhancedText || enhancedText.trim().length === 0) {
+        throw new Error('Empty response from Gemini API')
+      }
+
+      // Record API usage
+      rateLimiter.recordRequest(apiKeyToUse.id)
+      if (validApiKeys.length > 0) {
+        dispatch(incrementApiKeyUsage(apiKeyToUse.id))
+      }
+
+      setIsLoading(false)
+      return enhancedText.trim()
+
+    } catch (error) {
+      console.error('Error enhancing prompt:', error)
+      setIsLoading(false)
+      setError(error instanceof Error ? error.message : 'Failed to enhance prompt')
+      throw error
+    }
+  }, [apiKeys, apiKey, isApiKeyValid, dispatch])
+
   // Statistics function
   const getApiKeyStats = useCallback(() => {
     const totalKeys = apiKeys.length
@@ -459,6 +684,13 @@ Respond with only the title and keywords in the specified format.`
 
     // Enhanced metadata generation
     generateMetadata,
+
+    // Prompt generation
+    generatePrompts,
+
+    // Prompt enhancement
+    enhancePrompt,
+
     stopGeneration,
 
     // Processing state

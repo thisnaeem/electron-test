@@ -1,14 +1,12 @@
 /// <reference types="vite/client" />
+/// <reference types="../preload/index.d.ts" />
 
-interface Window {
-  api: {
-    checkForUpdates: () => Promise<any>
-    downloadUpdate: () => Promise<any>
-    quitAndInstall: () => Promise<any>
-    onUpdateStatus: (callback: (data: any) => void) => () => void
-    getAppVersion: () => Promise<string>
-    openExternalLink: (url: string) => void
-  }
+interface ImportMetaEnv {
+  readonly VITE_GA_MEASUREMENT_ID: string
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv
 }
 
 declare module '*.jpg' {

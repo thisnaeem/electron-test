@@ -2,6 +2,12 @@ import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'reac
 import { useState, useEffect } from 'react'
 
 import Generator from './pages/Generator'
+import ImageGenerator from './pages/tools/ImageGenerator'
+import BackgroundRemover from './pages/tools/BackgroundRemover'
+import YouTubeTranscriber from './pages/tools/YouTubeTranscriber'
+import FileConverter from './pages/tools/FileConverter'
+import PromptGenerator from './pages/tools/PromptGenerator'
+import FileProcessor from './pages/tools/FileProcessor'
 
 import { GeminiProvider } from './context/GeminiContext'
 import Sidebar from './components/Sidebar'
@@ -11,11 +17,62 @@ import TitleBar from './components/TitleBar'
 import SplashScreen from './components/SplashScreen'
 import { useAppSelector, useAppDispatch } from './store/hooks'
 import { setDarkMode } from './store/slices/settingsSlice'
+import analytics from './services/analytics'
 
 // Separate component to use router hooks
 function AppContent(): React.JSX.Element {
   const location = useLocation()
-  const isContentPage = location.pathname === '/generator' || location.pathname === '/settings'
+  const { analyticsEnabled } = useAppSelector(state => state.settings)
+  const isContentPage = location.pathname === '/generator' || location.pathname === '/settings' || location.pathname === '/image-generator' || location.pathname === '/background-remover' || location.pathname === '/youtube-transcriber' || location.pathname === '/file-converter' || location.pathname === '/prompt-generator' || location.pathname === '/file-processor'
+
+  // Track page views when location changes
+  useEffect(() => {
+    const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID
+    if (analyticsEnabled && measurementId) {
+      const pageName = location.pathname.replace('/', '') || 'home'
+      analytics.trackPageView(pageName)
+    }
+  }, [location.pathname, analyticsEnabled])
+
+  // Listen for navigation commands from tray menu
+  useEffect(() => {
+    const handleNavigateTo = (_event: Electron.IpcRendererEvent, route: string): void => {
+      console.log('Navigating to:', route)
+      window.location.hash = `#${route}`
+    }
+
+    const handleSetProcessingMode = (_event: Electron.IpcRendererEvent, mode: string): void => {
+      console.log('Setting processing mode:', mode)
+      // Store mode in localStorage for FileProcessor to pick up
+      localStorage.setItem('fileProcessorMode', mode)
+      // Dispatch custom event to notify FileProcessor component
+      window.dispatchEvent(new CustomEvent('setProcessingMode', { detail: mode }))
+    }
+
+    const handleClearAllPreviewsRequest = async (): Promise<void> => {
+      try {
+        const result = await window.api.clearAllPreviews()
+        window.electron.ipcRenderer.send('clear-all-previews-response', result)
+      } catch (error) {
+        window.electron.ipcRenderer.send('clear-all-previews-response', {
+          success: false,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        })
+      }
+    }
+
+    // Add IPC listeners
+    window.electron.ipcRenderer.on('navigate-to', handleNavigateTo)
+    window.electron.ipcRenderer.on('set-processing-mode', handleSetProcessingMode)
+    window.electron.ipcRenderer.on('clear-all-previews-request', handleClearAllPreviewsRequest)
+
+    // Cleanup listeners on unmount
+    return () => {
+      window.electron.ipcRenderer.removeListener('navigate-to', handleNavigateTo)
+      window.electron.ipcRenderer.removeListener('set-processing-mode', handleSetProcessingMode)
+      window.electron.ipcRenderer.removeListener('clear-all-previews-request', handleClearAllPreviewsRequest)
+    }
+  }, [])
 
   return (
     <div className="min-h-screen">
@@ -27,6 +84,12 @@ function AppContent(): React.JSX.Element {
             <Routes>
               <Route path="/" element={<Navigate to="/generator" replace />} />
               <Route path="/generator" element={<Generator />} />
+              <Route path="/image-generator" element={<ImageGenerator />} />
+              <Route path="/background-remover" element={<BackgroundRemover />} />
+              <Route path="/youtube-transcriber" element={<YouTubeTranscriber />} />
+              <Route path="/file-converter" element={<FileConverter />} />
+              <Route path="/prompt-generator" element={<PromptGenerator />} />
+              <Route path="/file-processor" element={<FileProcessor />} />
               <Route path="/settings" element={<Settings />} />
             </Routes>
           </div>
@@ -39,9 +102,26 @@ function AppContent(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   const dispatch = useAppDispatch()
-  const isDarkMode = useAppSelector(state => state.settings.isDarkMode)
+  const { isDarkMode, analyticsEnabled } = useAppSelector(state => state.settings)
   const [showSplash, setShowSplash] = useState(false)
   const [isInitialized, setIsInitialized] = useState(false)
+
+  // Initialize analytics
+  useEffect(() => {
+    const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID
+    if (analyticsEnabled && measurementId) {
+      // Update the analytics instance with the measurement ID
+      analytics.updateMeasurementId(measurementId)
+      analytics.init()
+      analytics.setEnabled(true)
+      analytics.trackAppEvent('startup', {
+        version: '1.0.10',
+        platform: 'electron'
+      })
+    } else {
+      analytics.setEnabled(false)
+    }
+  }, [analyticsEnabled])
 
   useEffect(() => {
     // Initialize dark mode from localStorage

@@ -32,6 +32,26 @@ export interface RateLimitInfo {
   nextAvailableTime: number
 }
 
+// New interfaces for prompt generation
+export interface PromptGenerationRequest {
+  input: string
+  inputType: 'text' | 'image'
+  platform: string
+  style: string
+  promptType: 'image' | 'video'
+  count: number
+  imageData?: string // For image-to-prompt
+}
+
+export interface PromptGenerationResult {
+  prompts: string[]
+  platform: string
+  style: string
+  promptType: 'image' | 'video'
+  success: boolean
+  error?: string
+}
+
 export interface GeminiContextType {
   // Legacy single API key support
   apiKey: string
@@ -43,6 +63,12 @@ export interface GeminiContextType {
 
   // Enhanced metadata generation with parallel processing
   generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void) => Promise<MetadataResult[]>
+
+  // New prompt generation functionality
+  generatePrompts: (request: PromptGenerationRequest) => Promise<PromptGenerationResult>
+
+  // Prompt enhancement functionality
+  enhancePrompt: (originalPrompt: string) => Promise<string>
 
   // Stop metadata generation
   stopGeneration: () => void

@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import Together from 'together-ai'
 
 export interface ApiKeyInfo {
   id: string
@@ -23,8 +24,20 @@ interface SettingsState {
   apiKeys: ApiKeyInfo[]
   isValidatingAny: boolean
 
+  // Together AI API key
+  togetherApiKey: string
+  isTogetherApiKeyValid: boolean
+  isValidatingTogetherApiKey: boolean
+  togetherApiKeyValidationError: string | null
+
   // Dark mode
   isDarkMode: boolean
+
+  // Onboarding
+  hasCompletedOnboarding: boolean
+
+  // Analytics
+  analyticsEnabled: boolean
 }
 
 // Helper function to safely load API keys from localStorage
@@ -67,8 +80,20 @@ const initialState: SettingsState = {
   apiKeys: loadApiKeysFromStorage(),
   isValidatingAny: false,
 
+  // Together AI API key
+  togetherApiKey: localStorage.getItem('togetherApiKey') || '',
+  isTogetherApiKeyValid: localStorage.getItem('togetherApiKeyValid') === 'true',
+  isValidatingTogetherApiKey: false,
+  togetherApiKeyValidationError: null,
+
   // Dark mode
-  isDarkMode: localStorage.getItem('darkMode') === 'true'
+  isDarkMode: localStorage.getItem('darkMode') === 'true',
+
+  // Onboarding - check if user has at least 5 valid API keys
+  hasCompletedOnboarding: localStorage.getItem('hasCompletedOnboarding') === 'true',
+
+  // Analytics
+  analyticsEnabled: localStorage.getItem('analyticsEnabled') !== 'false' // Default to true unless explicitly disabled
 }
 
 // Migrate legacy API key to new system if exists
@@ -188,6 +213,46 @@ export const validateMultipleApiKey = createAsyncThunk(
   }
 )
 
+export const validateTogetherApiKey = createAsyncThunk(
+  'settings/validateTogetherApiKey',
+  async (key: string, { rejectWithValue }) => {
+    if (!key) return rejectWithValue('Together API key is required')
+
+    try {
+      const together = new Together({ apiKey: key })
+
+      // Test the API key with a simple image generation request
+      console.log('🧪 Testing Together API key...')
+      const response = await together.images.create({
+        model: "black-forest-labs/FLUX.1-schnell-Free",
+        prompt: "A simple test image",
+        steps: 1,
+        n: 1
+      })
+
+      if (!response.data || response.data.length === 0) {
+        throw new Error('API key validation failed: No data returned from Together AI')
+      }
+
+      console.log('✅ Together API key validation successful')
+
+      // Store in localStorage for persistence
+      localStorage.setItem('togetherApiKey', key)
+      localStorage.setItem('togetherApiKeyValid', 'true')
+
+      return true
+    } catch (error) {
+      console.error('❌ Together API key validation error:', error)
+      localStorage.setItem('togetherApiKeyValid', 'false')
+      return rejectWithValue(
+        error instanceof Error
+          ? `Validation failed: ${error.message}`
+          : 'Validation failed. Check your Together API key and internet connection.'
+      )
+    }
+  }
+)
+
 const settingsSlice = createSlice({
   name: 'settings',
   initialState,
@@ -254,6 +319,16 @@ const settingsSlice = createSlice({
       }
     },
 
+    // Together API key actions
+    setTogetherApiKey: (state, action: PayloadAction<string>) => {
+      state.togetherApiKey = action.payload
+      localStorage.setItem('togetherApiKey', action.payload)
+    },
+
+    clearTogetherValidationError: (state) => {
+      state.togetherApiKeyValidationError = null
+    },
+
     // Dark mode actions
     toggleDarkMode: (state) => {
       state.isDarkMode = !state.isDarkMode
@@ -277,6 +352,27 @@ const settingsSlice = createSlice({
       } else {
         document.documentElement.classList.remove('dark')
       }
+    },
+
+    // Onboarding actions
+    completeOnboarding: (state) => {
+      state.hasCompletedOnboarding = true
+      localStorage.setItem('hasCompletedOnboarding', 'true')
+    },
+
+    // Helper to check if onboarding should be completed (5+ valid API keys)
+    checkOnboardingCompletion: (state) => {
+      const validApiKeys = state.apiKeys.filter(key => key.isValid).length
+      if (validApiKeys >= 5 && !state.hasCompletedOnboarding) {
+        state.hasCompletedOnboarding = true
+        localStorage.setItem('hasCompletedOnboarding', 'true')
+      }
+    },
+
+    // Analytics actions
+    setAnalyticsEnabled: (state, action: PayloadAction<boolean>) => {
+      state.analyticsEnabled = action.payload
+      localStorage.setItem('analyticsEnabled', action.payload.toString())
     }
   },
   extraReducers: (builder) => {
@@ -316,6 +412,13 @@ const settingsSlice = createSlice({
         // Check if any keys are still validating
         state.isValidatingAny = state.apiKeys.some(k => k.isValidating)
         saveApiKeysToStorage(state.apiKeys)
+
+        // Check if onboarding should be completed (5+ valid keys)
+        const validApiKeys = state.apiKeys.filter(k => k.isValid).length
+        if (validApiKeys >= 5 && !state.hasCompletedOnboarding) {
+          state.hasCompletedOnboarding = true
+          localStorage.setItem('hasCompletedOnboarding', 'true')
+        }
       })
       .addCase(validateMultipleApiKey.rejected, (state, action) => {
         const payload = action.payload as { id: string; error: string }
@@ -330,6 +433,22 @@ const settingsSlice = createSlice({
         state.isValidatingAny = state.apiKeys.some(k => k.isValidating)
         saveApiKeysToStorage(state.apiKeys)
       })
+
+      // Together API key validation
+      .addCase(validateTogetherApiKey.pending, (state) => {
+        state.isValidatingTogetherApiKey = true
+        state.togetherApiKeyValidationError = null
+      })
+      .addCase(validateTogetherApiKey.fulfilled, (state) => {
+        state.isValidatingTogetherApiKey = false
+        state.isTogetherApiKeyValid = true
+        state.togetherApiKeyValidationError = null
+      })
+      .addCase(validateTogetherApiKey.rejected, (state, action) => {
+        state.isValidatingTogetherApiKey = false
+        state.isTogetherApiKeyValid = false
+        state.togetherApiKeyValidationError = action.payload as string
+      })
   }
 })
 
@@ -342,8 +461,13 @@ export const {
   incrementApiKeyUsage,
   resetApiKeyUsage,
   clearApiKeyError,
+  setTogetherApiKey,
+  clearTogetherValidationError,
   toggleDarkMode,
-  setDarkMode
+  setDarkMode,
+  completeOnboarding,
+  checkOnboardingCompletion,
+  setAnalyticsEnabled
 } = settingsSlice.actions
 
 export default settingsSlice.reducer
