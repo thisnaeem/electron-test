@@ -1,4 +1,5 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
+import { PythonAPI } from './python-api'
 
 // Update status event data types
 type UpdateStatus =
@@ -159,6 +160,9 @@ declare global {
       unmaximizeWindow: () => void
       closeWindow: () => void
       quitApp: () => void
+
+      // Python API
+      python: PythonAPI
     }
   }
 }

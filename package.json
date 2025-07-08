@@ -1,6 +1,6 @@
 {
   "name": "csvgen-pro",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "An Electron application with React and TypeScript",
   "main": "./out/main/index.js",
   "author": "example.com",
@@ -14,7 +14,8 @@
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
-    "postinstall": "electron-builder install-app-deps",
+    "postinstall": "electron-builder install-app-deps && node scripts/python-setup.js",
+    "prebuild": "node scripts/prebuild.js",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "electron-vite build && electron-builder --mac",
@@ -23,7 +24,8 @@
     "publish:win": "npm run build && electron-builder --win --publish=always",
     "publish:mac": "npm run build && electron-builder --mac --publish=always",
     "publish:linux": "npm run build && electron-builder --linux --publish=always",
-    "publish:all": "npm run build && electron-builder -mwl --publish=always"
+    "publish:all": "npm run build && electron-builder -mwl --publish=always",
+    "setup-python": "node scripts/python-setup.js"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

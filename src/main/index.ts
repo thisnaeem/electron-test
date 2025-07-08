@@ -7,6 +7,8 @@ import electronLog from 'electron-log'
 import fs from 'fs'
 import path from 'path'
 import AutoLaunch from 'auto-launch'
+import { setupPythonIPC } from './python-ipc'
+import { pythonRuntime } from './python-runtime'
 
 export function getAutoUpdater(): AppUpdater {
   const { autoUpdater } = electronUpdater
@@ -1160,6 +1162,20 @@ app.whenReady().then(async () => {
   })
 
   createWindow()
+
+  // Setup Python IPC handlers
+  setupPythonIPC()
+
+  // Initialize Python runtime in background
+  pythonRuntime.setupPythonRuntime().then((success) => {
+    if (success) {
+      console.log('✅ Python runtime initialized successfully')
+    } else {
+      console.log('⚠️ Python runtime initialization failed, some features may not work')
+    }
+  }).catch((error) => {
+    console.error('❌ Python runtime initialization error:', error)
+  })
 
   // Check for updates on app start (with a small delay to ensure window is ready)
   setTimeout(() => {

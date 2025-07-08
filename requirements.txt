@@ -3,3 +3,4 @@ rembg[new]>=2.0.50
 onnxruntime>=1.15.0
 requests>=2.25.0
 Pillow>=9.0.0
+

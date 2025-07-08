@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { pythonApi } from './python-api'
 
 // Custom APIs for renderer
 const api = {
@@ -68,7 +69,10 @@ const api = {
   maximizeWindow: () => ipcRenderer.send('window-maximize'),
   unmaximizeWindow: () => ipcRenderer.send('window-unmaximize'),
   closeWindow: () => ipcRenderer.send('window-close'),
-  quitApp: () => ipcRenderer.send('app-quit')
+  quitApp: () => ipcRenderer.send('app-quit'),
+
+  // Python API
+  python: pythonApi
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

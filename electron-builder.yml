@@ -2,7 +2,13 @@ appId: com.electron.app
 productName: CSVGen Pro
 directories:
   buildResources: build
+beforeBuild: npm run prebuild
 files:
+  - 'out/**/*'
+  - 'scripts/**/*'
+  - 'python-runtime/**/*'
+  - 'requirements.txt'
+  - 'package.json'
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
@@ -11,6 +17,8 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - scripts/**
+  - python-runtime/**
 win:
   executableName: csvgen-pro
 nsis:
