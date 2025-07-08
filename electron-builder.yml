@@ -2,15 +2,15 @@ appId: com.electron.app
 productName: CSVGen Pro
 directories:
   buildResources: build
-beforeBuild: npm run prebuild
 files:
   - 'out/**/*'
   - 'scripts/**/*'
-  - 'python-runtime/**/*'
   - 'requirements.txt'
+  - 'build/install-python.ps1'
   - 'package.json'
   - '!**/.vscode/*'
   - '!src/*'
+  - '!python-runtime/**'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
@@ -18,7 +18,6 @@ files:
 asarUnpack:
   - resources/**
   - scripts/**
-  - python-runtime/**
 win:
   executableName: csvgen-pro
 nsis:
@@ -26,6 +25,7 @@ nsis:
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  include: build/installer.nsh
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:

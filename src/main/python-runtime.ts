@@ -27,13 +27,42 @@ export class PythonRuntime {
     if (isDev) {
       // Development mode - use project directory
       this.scriptsDir = path.join(process.cwd(), 'scripts');
-      this.pythonPath = this.getPythonExecutable(process.cwd());
+      this.pythonPath = this.getSystemPythonPath() || this.getPythonExecutable(process.cwd());
     } else {
-      // Production mode - use app resources
+      // Production mode - prefer system Python, fallback to embedded
       const resourcesPath = process.resourcesPath;
-      this.scriptsDir = path.join(resourcesPath, 'scripts');
-      this.pythonPath = this.getPythonExecutable(resourcesPath);
+      this.scriptsDir = path.join(resourcesPath, 'app.asar.unpacked', 'scripts');
+      this.pythonPath = this.getSystemPythonPath() || this.getPythonExecutable(path.join(resourcesPath, 'app.asar.unpacked'));
     }
+  }
+
+  private getSystemPythonPath(): string | null {
+    const { execSync } = require('child_process');
+
+    try {
+      // Try python command first (Windows after our installer)
+      const pythonVersion = execSync('python --version', { encoding: 'utf8', stdio: 'pipe' });
+      if (pythonVersion.includes('Python 3.11')) {
+        console.log(`[PythonRuntime] Found system Python: ${pythonVersion.trim()}`);
+        return 'python';
+      }
+    } catch (error) {
+      // Python command not found or wrong version
+    }
+
+    try {
+      // Try python3 command (macOS/Linux)
+      const python3Version = execSync('python3 --version', { encoding: 'utf8', stdio: 'pipe' });
+      if (python3Version.includes('Python 3.11')) {
+        console.log(`[PythonRuntime] Found system Python3: ${python3Version.trim()}`);
+        return 'python3';
+      }
+    } catch (error) {
+      // Python3 command not found or wrong version
+    }
+
+    console.log('[PythonRuntime] System Python 3.11 not found, will use embedded Python');
+    return null;
   }
 
   private getPythonExecutable(basePath: string): string {
