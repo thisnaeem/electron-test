@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useAppDispatch, useAppSelector } from '../store/hooks'
-import { addFile, saveImagePreview } from '../store/slices/filesSlice'
+import { addFile, saveImagePreview, setUploadProcessing, updateUploadProgress } from '../store/slices/filesSlice'
 import uploadIcon from '../assets/icons/image-upload-stroke-rounded.svg'
 import addSquareIcon from '../assets/icons/add-square-stroke-rounded.svg'
 
@@ -114,7 +114,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
       const validFiles = incomingFiles.filter(file => {
         const isValidType = file.type.startsWith('image/') &&
           ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
-        const isValidSize = file.size <= 10 * 1024 * 1024 // 10MB limit
+        const isValidSize = file.size <= 20 * 1024 * 1024 // 20MB limit
 
         if (!isValidType) {
           setError(`${file.name} is not a supported image format. Please use JPEG, PNG, GIF, or WebP.`)
@@ -122,7 +122,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         }
 
         if (!isValidSize) {
-          setError(`${file.name} is too large. Please use images smaller than 10MB.`)
+          setError(`${file.name} is too large. Please use images smaller than 20MB.`)
           return false
         }
 
@@ -133,9 +133,16 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         return
       }
 
+      // Start upload processing
+      dispatch(setUploadProcessing({ isProcessing: true, total: validFiles.length }))
+
       // Process each file
-      for (const file of validFiles) {
+      for (let i = 0; i < validFiles.length; i++) {
+        const file = validFiles[i]
         const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+        // Update progress - show current file being processed
+        dispatch(updateUploadProgress({ current: i, currentFileName: file.name }))
 
         // Create file data object
         const fileData = {
@@ -149,6 +156,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         }
 
         // Create preview with compression
+        await new Promise<void>((resolve) => {
         const reader = new FileReader()
         reader.onload = async (e) => {
           if (e.target?.result) {
@@ -167,10 +175,22 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
               previewPath: filename,
               previewData: compressedData
             }))
+
+              resolve()
           }
         }
         reader.readAsDataURL(file)
+        })
       }
+
+      // Update final progress to show completion
+      dispatch(updateUploadProgress({ current: validFiles.length, currentFileName: '' }))
+
+      // Small delay to show completion before hiding modal
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // End upload processing
+      dispatch(setUploadProcessing({ isProcessing: false }))
 
       // Notify parent component
       onFilesAccepted(validFiles)
@@ -178,6 +198,8 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
     } catch (err) {
       console.error('Error processing files:', err)
       setError('An error occurred while processing the files. Please try again.')
+      // End upload processing on error
+      dispatch(setUploadProcessing({ isProcessing: false }))
     }
   }, [dispatch, onFilesAccepted, compressImageIfNeeded, files.length])
 
@@ -267,7 +289,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
             {isDragOver ? 'Drop images here' : 'Drop images here or click to upload'}
               </p>
               <p className="text-sm text-gray-500">
-            Supported formats: JPEG, PNG, GIF, WebP (max 10MB, up to 1000 files)
+            Supported formats: JPEG, PNG, GIF, WebP (max 20MB, up to 1000 files)
               </p>
             </div>
               </div>

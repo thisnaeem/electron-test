@@ -3,6 +3,7 @@ import { ApiKeyInfo } from '../store/slices/settingsSlice'
 export interface MetadataResult {
   filename: string
   title: string
+  description: string
   keywords: string[]
 }
 
@@ -62,7 +63,7 @@ export interface GeminiContextType {
   isValidatingAny: boolean
 
   // Enhanced metadata generation with parallel processing
-  generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void) => Promise<MetadataResult[]>
+  generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void, settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }) => Promise<MetadataResult[]>
 
   // New prompt generation functionality
   generatePrompts: (request: PromptGenerationRequest) => Promise<PromptGenerationResult>

@@ -1,7 +1,7 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/ChatGPT Image Jun 29, 2025, 02_45_50 AM.png?asset'
+
 import electronUpdater, { type AppUpdater } from 'electron-updater'
 import electronLog from 'electron-log'
 import fs from 'fs'
@@ -117,7 +117,7 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     frame: false, // Custom title bar
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform === 'linux' ? { icon: join(__dirname, '../../resources/icon.png') } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

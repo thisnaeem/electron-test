@@ -323,7 +323,7 @@ const Help = (): React.JSX.Element => {
                   Problem: Files not uploading
                 </p>
                 <ul className="text-sm text-gray-600 dark:text-gray-300 ml-4 space-y-1">
-                  <li>• Check file size (max 10MB per file)</li>
+                  <li>• Check file size (max 20MB per file)</li>
                   <li>• Ensure file format is supported</li>
                   <li>• Try uploading fewer files at once</li>
                   <li>• Verify file isn't corrupted</li>

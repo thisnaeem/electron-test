@@ -2,6 +2,8 @@ import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { removeFile, clearFiles, deleteImagePreview, clearAllPreviews, addFile, saveImagePreview, MetadataResult } from '../store/slices/filesSlice'
 import { ImageInput } from '../context/GeminiContext.types'
 import { useState, useCallback, memo } from 'react'
+import GenerationSettingsModal from './GenerationSettingsModal'
+import ExportDropdown from './ExportDropdown'
 
 // Custom Tooltip Component
 const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }): React.JSX.Element => {
@@ -28,7 +30,7 @@ const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }
 
 interface UploadedImagesDisplayProps {
   onClear: () => void
-  onProcess?: (files: File[] | ImageInput[]) => void
+  onProcess?: (files: File[] | ImageInput[], settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }) => void
   onFilesAccepted: (files: File[] | ImageInput[]) => void
   onImageRemoved?: (filename: string) => void
   onImageSelected?: (imageId: string) => void
@@ -39,7 +41,7 @@ interface UploadedImagesDisplayProps {
   onExportCSV?: () => void
   processingProgress?: { current: number; total: number }
   currentProcessingFilename?: string | null
-  onMetadataUpdated?: (filename: string, updatedMetadata: { title: string; keywords: string[] }) => void
+  onMetadataUpdated?: (filename: string, updatedMetadata: { title: string; keywords: string[]; description?: string }) => void
   onStopGeneration?: () => void
 }
 
@@ -50,9 +52,10 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
   const [editingKeywords, setEditingKeywords] = useState<{[filename: string]: string[]}>({})
   const [newKeyword, setNewKeyword] = useState('')
   const [draggedKeyword, setDraggedKeyword] = useState<{filename: string, index: number} | null>(null)
-  const [copyFeedback, setCopyFeedback] = useState<{type: 'title' | 'keywords', filename: string} | null>(null)
+  const [copyFeedback, setCopyFeedback] = useState<{type: 'title' | 'keywords' | 'description', filename: string} | null>(null)
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   const [processingCount, setProcessingCount] = useState(0)
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
 
   const handleGenerateMetadata = useCallback((): void => {
     if (files.length > 0) {
@@ -64,19 +67,36 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
       )
 
       if (filesToProcess.length > 0) {
-        // Process files one by one
+        // Show settings modal instead of immediately processing
+        setShowSettingsModal(true)
+      } else {
+        console.log('All images already have metadata generated')
+      }
+    }
+  }, [files, metadataResults])
+
+  const handleConfirmGeneration = useCallback((settings: { titleWords: number; keywordsCount: number; descriptionWords: number }): void => {
+    if (files.length > 0) {
+      // Filter files that don't have metadata yet
+      const filesToProcess = files.filter(file =>
+        file.previewData &&
+        file.previewData.trim() !== '' &&
+        !metadataResults?.some(result => result.filename === file.name)
+      )
+
+      if (filesToProcess.length > 0) {
+        // Process files with settings
         const imageInputs: ImageInput[] = filesToProcess.map(file => ({
           imageData: file.previewData || '',
           filename: file.name
         }))
 
         if (onProcess) {
-          onProcess(imageInputs)
+          // Pass settings to the processing function
+          onProcess(imageInputs, settings)
         } else {
           onFilesAccepted(imageInputs)
         }
-      } else {
-        console.log('All images already have metadata generated')
       }
     }
   }, [files, metadataResults, onProcess, onFilesAccepted])
@@ -220,7 +240,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
       const validFiles = filesToProcess.filter(file => {
         const isValidType = file.type.startsWith('image/') &&
           ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
-        const isValidSize = file.size <= 10 * 1024 * 1024 // 10MB limit
+        const isValidSize = file.size <= 20 * 1024 * 1024 // 20MB limit
 
         if (!isValidType) {
           console.error(`${file.name} is not a supported image format.`)
@@ -228,7 +248,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
         }
 
         if (!isValidSize) {
-          console.error(`${file.name} is too large. Please use images smaller than 10MB.`)
+          console.error(`${file.name} is too large. Please use images smaller than 20MB.`)
           return false
         }
 
@@ -369,6 +389,16 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
       setTimeout(() => setCopyFeedback(null), 2000)
     } catch (err) {
       console.error('Failed to copy keywords:', err)
+    }
+  }, [])
+
+  const handleCopyDescription = useCallback(async (description: string, filename: string): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(description)
+      setCopyFeedback({ type: 'description', filename })
+      setTimeout(() => setCopyFeedback(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy description:', err)
     }
   }, [])
 
@@ -525,13 +555,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
           )}
 
           {hasMetadata && onExportCSV && (
-            <button
-              onClick={onExportCSV}
-              disabled={isProcessing || isLoading}
-              className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Export
-            </button>
+            <ExportDropdown onExportCSV={onExportCSV} disabled={isProcessing || isLoading} />
           )}
         </div>
       </div>
@@ -773,6 +797,38 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                 </p>
               </div>
 
+              {/* Description section */}
+              {metadata.description && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">Description:</h5>
+                    <button
+                      onClick={() => handleCopyDescription(metadata.description!, metadata.filename)}
+                      className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 flex items-center gap-1"
+                    >
+                      {copyFeedback?.type === 'description' && copyFeedback.filename === metadata.filename ? (
+                        <>
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Copy
+                        </>
+                      )}
+                    </button>
+                  </div>
+                  <p className="text-sm text-gray-900 dark:text-white leading-relaxed">
+                    {metadata.description}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -884,6 +940,13 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
           </div>
         </div>
       )}
+
+      {/* Generation Settings Modal */}
+      <GenerationSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+        onConfirm={handleConfirmGeneration}
+      />
     </div>
   )
 })

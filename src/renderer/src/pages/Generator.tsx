@@ -5,6 +5,8 @@ import { ImageInput, MetadataResult } from '../context/GeminiContext.types'
 import { addMetadata, updateMetadata, removeMetadata, clearMetadata } from '../store/slices/filesSlice'
 import ImageUploader from '../components/ImageUploader'
 import UploadedImagesDisplay from '../components/UploadedImagesDisplay'
+import UploadProcessingModal from '../components/UploadProcessingModal'
+import { downloadMultiPlatformCSVs, ImageData } from '../utils/csvGenerator'
 
 const Generator = (): React.JSX.Element => {
   const { generateMetadata, stopGeneration, isLoading, error, processingProgress } = useGemini()
@@ -41,7 +43,7 @@ const Generator = (): React.JSX.Element => {
     setSelectedImageId(imageId)
   }, [])
 
-  const handleProcess = useCallback(async (input: File[] | ImageInput[]) => {
+  const handleProcess = useCallback(async (input: File[] | ImageInput[], settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }) => {
     if (input.length === 0) return
 
     // Check if user has enough API keys to use the generator
@@ -83,7 +85,7 @@ const Generator = (): React.JSX.Element => {
       }
 
       // Use the new parallel processing system with real-time callback
-      const results = await generateMetadata(imageInputs, handleMetadataGenerated)
+      const results = await generateMetadata(imageInputs, handleMetadataGenerated, settings)
 
       // Final fallback - ensure any missed results are added
       // (This shouldn't be needed with real-time updates, but kept as safety net)
@@ -137,43 +139,32 @@ const Generator = (): React.JSX.Element => {
     }
   }, [files, handleProcess])
 
+  // Get selected platforms from settings outside of callback
+  const { generationSettings } = useAppSelector(state => state.settings)
+
   const handleExportCSV = useCallback(() => {
     if (metadata.length === 0) return
 
-    // Create CSV content
-    const csvHeaders = ['Filename', 'Title', 'Keywords']
-    const csvRows = metadata.map(result => [
-      result.filename,
-      result.title,
-      result.keywords.join(', ')
-    ])
+    const selectedPlatforms = generationSettings.platforms || ['freepik']
 
-    const csvContent = [
-      csvHeaders.join(','),
-      ...csvRows.map(row =>
-        row.map(cell => `"${cell.replace(/"/g, '""')}"`) // Escape quotes in CSV
-          .join(',')
-      )
-    ].join('\n')
+    // Convert MetadataResult to ImageData format
+    const imageDataList: ImageData[] = metadata.map(result => ({
+      filename: result.filename,
+      title: result.title,
+      keywords: result.keywords,
+      description: result.description || ''
+    }))
 
-    // Create and download the CSV file
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `image-metadata-${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }, [metadata])
+    // Use the new comprehensive CSV generator for all platforms
+    downloadMultiPlatformCSVs(selectedPlatforms, imageDataList)
+  }, [metadata, generationSettings.platforms])
 
-  const handleMetadataUpdated = useCallback((filename: string, updatedMetadata: { title: string; keywords: string[] }) => {
+  const handleMetadataUpdated = useCallback((filename: string, updatedMetadata: { title: string; keywords: string[]; description?: string }) => {
     dispatch(updateMetadata({
       filename,
       title: updatedMetadata.title,
-      keywords: updatedMetadata.keywords
+      keywords: updatedMetadata.keywords,
+      description: updatedMetadata.description
     }))
   }, [dispatch])
 
@@ -182,6 +173,8 @@ const Generator = (): React.JSX.Element => {
   return (
     <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
       <div className="min-h-full w-full p-4 relative space-y-4">
+        {/* Upload Processing Modal */}
+        <UploadProcessingModal />
         {/* Image Uploader or API Keys Required Message */}
         {files.length === 0 && !isLoading && (
           <div className="h-full flex items-center justify-center">

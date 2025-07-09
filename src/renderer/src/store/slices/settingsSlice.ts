@@ -38,6 +38,14 @@ interface SettingsState {
 
   // Analytics
   analyticsEnabled: boolean
+
+  // Generation settings
+  generationSettings: {
+    titleWords: number
+    keywordsCount: number
+    descriptionWords: number
+    platforms: string[] // Array of selected platforms: 'freepik', 'shutterstock', 'adobe-stock'
+  }
 }
 
 // Helper function to safely load API keys from localStorage
@@ -93,7 +101,49 @@ const initialState: SettingsState = {
   hasCompletedOnboarding: localStorage.getItem('hasCompletedOnboarding') === 'true',
 
   // Analytics
-  analyticsEnabled: localStorage.getItem('analyticsEnabled') !== 'false' // Default to true unless explicitly disabled
+  analyticsEnabled: localStorage.getItem('analyticsEnabled') !== 'false', // Default to true unless explicitly disabled
+
+    // Generation settings - load from localStorage with proper defaults
+  generationSettings: (() => {
+    try {
+      const savedTitleWords = localStorage.getItem('generationTitleWords')
+      const savedKeywordsCount = localStorage.getItem('generationKeywordsCount')
+      const savedDescriptionWords = localStorage.getItem('generationDescriptionWords')
+      const savedPlatforms = localStorage.getItem('generationPlatforms')
+
+      console.log('🔧 Loading generation settings from localStorage:', {
+        savedTitleWords,
+        savedKeywordsCount,
+        savedDescriptionWords,
+        savedPlatforms
+      })
+
+      let platforms: string[] = []
+      if (savedPlatforms) {
+        try {
+          platforms = JSON.parse(savedPlatforms)
+          if (!Array.isArray(platforms)) platforms = []
+        } catch {
+          platforms = []
+        }
+      }
+
+      return {
+        titleWords: savedTitleWords ? Math.max(5, Math.min(20, parseInt(savedTitleWords))) : 15,
+        keywordsCount: savedKeywordsCount ? Math.max(10, Math.min(50, parseInt(savedKeywordsCount))) : 45,
+        descriptionWords: savedDescriptionWords ? Math.max(5, Math.min(20, parseInt(savedDescriptionWords))) : 12,
+        platforms: platforms.length > 0 ? platforms : ['freepik'] // Default to Freepik
+      }
+    } catch (error) {
+      console.error('❌ Error loading generation settings from localStorage:', error)
+      return {
+        titleWords: 15,
+        keywordsCount: 45,
+        descriptionWords: 12,
+        platforms: ['freepik']
+      }
+    }
+  })()
 }
 
 // Migrate legacy API key to new system if exists
@@ -373,6 +423,41 @@ const settingsSlice = createSlice({
     setAnalyticsEnabled: (state, action: PayloadAction<boolean>) => {
       state.analyticsEnabled = action.payload
       localStorage.setItem('analyticsEnabled', action.payload.toString())
+    },
+
+    // Debug action to check localStorage
+    debugGenerationSettings: (state) => {
+      console.log('🔍 Debug Generation Settings:')
+      console.log('- Redux state:', state.generationSettings)
+      console.log('- localStorage generationTitleWords:', localStorage.getItem('generationTitleWords'))
+      console.log('- localStorage generationKeywordsCount:', localStorage.getItem('generationKeywordsCount'))
+      console.log('- localStorage generationDescriptionWords:', localStorage.getItem('generationDescriptionWords'))
+      console.log('- localStorage generationPlatforms:', localStorage.getItem('generationPlatforms'))
+    },
+
+        // Generation settings actions
+    updateGenerationSettings: (state, action: PayloadAction<{ titleWords: number; keywordsCount: number; descriptionWords: number; platforms?: string[] }>) => {
+      // Validate and clamp values to allowed ranges
+      const titleWords = Math.max(5, Math.min(20, action.payload.titleWords))
+      const keywordsCount = Math.max(10, Math.min(50, action.payload.keywordsCount))
+      const descriptionWords = Math.max(5, Math.min(20, action.payload.descriptionWords))
+      const platforms = action.payload.platforms || state.generationSettings.platforms
+
+      console.log('💾 Saving generation settings:', { titleWords, keywordsCount, descriptionWords, platforms })
+
+      // Update Redux state
+      state.generationSettings = { titleWords, keywordsCount, descriptionWords, platforms }
+
+      // Save to localStorage for persistence
+      try {
+        localStorage.setItem('generationTitleWords', titleWords.toString())
+        localStorage.setItem('generationKeywordsCount', keywordsCount.toString())
+        localStorage.setItem('generationDescriptionWords', descriptionWords.toString())
+        localStorage.setItem('generationPlatforms', JSON.stringify(platforms))
+        console.log('✅ Generation settings saved to localStorage successfully')
+      } catch (error) {
+        console.error('❌ Error saving generation settings to localStorage:', error)
+      }
     }
   },
   extraReducers: (builder) => {
@@ -467,7 +552,9 @@ export const {
   setDarkMode,
   completeOnboarding,
   checkOnboardingCompletion,
-  setAnalyticsEnabled
+  setAnalyticsEnabled,
+  debugGenerationSettings,
+  updateGenerationSettings
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

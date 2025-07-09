@@ -14,6 +14,7 @@ export interface MetadataResult {
   filename: string
   title: string
   keywords: string[]
+  description?: string
 }
 
 interface FilesState {
@@ -21,13 +22,25 @@ interface FilesState {
   metadata: MetadataResult[]
   isLoading: boolean
   error: string | null
+  isUploadProcessing: boolean
+  uploadProgress: {
+    current: number
+    total: number
+    currentFileName: string
+  }
 }
 
 const initialState: FilesState = {
   files: [],
   metadata: [],
   isLoading: false,
-  error: null
+  error: null,
+  isUploadProcessing: false,
+  uploadProgress: {
+    current: 0,
+    total: 0,
+    currentFileName: ''
+  }
 }
 
 // Async thunk to save image preview to Electron file system
@@ -160,13 +173,14 @@ const filesSlice = createSlice({
         }
       })
     },
-    updateMetadata: (state, action: PayloadAction<{ filename: string; title: string; keywords: string[] }>) => {
+    updateMetadata: (state, action: PayloadAction<{ filename: string; title: string; keywords: string[]; description?: string }>) => {
       const existingIndex = state.metadata.findIndex(m => m.filename === action.payload.filename)
       if (existingIndex >= 0) {
         state.metadata[existingIndex] = {
           filename: action.payload.filename,
           title: action.payload.title,
-          keywords: action.payload.keywords
+          keywords: action.payload.keywords,
+          description: action.payload.description
         }
       }
     },
@@ -178,6 +192,27 @@ const filesSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null
+    },
+    // Upload processing management
+    setUploadProcessing: (state, action: PayloadAction<{ isProcessing: boolean; total?: number }>) => {
+      state.isUploadProcessing = action.payload.isProcessing
+      if (action.payload.total !== undefined) {
+        state.uploadProgress.total = action.payload.total
+        state.uploadProgress.current = 0
+        state.uploadProgress.currentFileName = ''
+      }
+      if (!action.payload.isProcessing) {
+        // Reset progress when processing ends
+        state.uploadProgress = {
+          current: 0,
+          total: 0,
+          currentFileName: ''
+        }
+      }
+    },
+    updateUploadProgress: (state, action: PayloadAction<{ current: number; currentFileName: string }>) => {
+      state.uploadProgress.current = action.payload.current
+      state.uploadProgress.currentFileName = action.payload.currentFileName
     }
   },
   extraReducers: (builder) => {
@@ -246,5 +281,5 @@ const filesSlice = createSlice({
   }
 })
 
-export const { addFile, addFiles, removeFile, clearFiles, updateFilePreview, addMetadata, updateMetadata, removeMetadata, clearMetadata, clearError } = filesSlice.actions
+export const { addFile, addFiles, removeFile, clearFiles, updateFilePreview, addMetadata, updateMetadata, removeMetadata, clearMetadata, clearError, setUploadProcessing, updateUploadProgress } = filesSlice.actions
 export default filesSlice.reducer

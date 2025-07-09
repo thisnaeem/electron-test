@@ -41,7 +41,8 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
 
   const generateMetadataForSingleImage = useCallback(async (
     imageInput: ImageInput,
-    apiKeyInfo: ApiKeyInfo
+    apiKeyInfo: ApiKeyInfo,
+    settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }
   ): Promise<MetadataResult> => {
     const { imageData, filename } = imageInput
 
@@ -59,19 +60,25 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
       const modelName = 'gemini-2.0-flash'
       const model = genAI.getGenerativeModel({ model: modelName })
 
+      const titleWords = settings?.titleWords || 15
+      const keywordsCount = settings?.keywordsCount || 45
+      const descriptionWords = settings?.descriptionWords || 12
+
             const prompt = `Analyze this image and provide metadata in the following exact format:
 
-Title: [A descriptive title in exactly 15 words]
-Keywords: [Exactly 45-46 relevant keywords separated by commas]
+Title: [A descriptive title in exactly ${titleWords} words]
+Description: [A descriptive summary in exactly ${descriptionWords} words]
+Keywords: [Exactly ${keywordsCount} relevant keywords separated by commas]
 
 Requirements:
-- Title must be exactly 15 words, descriptive and engaging, no extra characters must be one sentence only like most stock agency images has like adobe stock
-- Keywords must be 45-46 items, relevant to the image content
+- Title must be exactly ${titleWords} words, descriptive and engaging, no extra characters must be one sentence only like most stock agency images has like adobe stock
+- Description must be exactly ${descriptionWords} words, providing a brief summary of the image content
+- Keywords must be ${keywordsCount} items, relevant to the image content
 - Focus on objects, colors, style, mood, and context visible in the image
 - Use single words or short phrases for keywords
 - Separate keywords with commas only
 
-Respond with only the title and keywords in the specified format.`
+Respond with only the title, description, and keywords in the specified format.`
 
             const content: (string | Part)[] = [
               prompt,
@@ -94,11 +101,14 @@ Respond with only the title and keywords in the specified format.`
             // Parse the response
             const lines = text.split('\n').filter(line => line.trim())
             let title = ''
+            let description = ''
             let keywords: string[] = []
 
             for (const line of lines) {
               if (line.toLowerCase().includes('title:')) {
                 title = line.replace(/title:/i, '').trim()
+              } else if (line.toLowerCase().includes('description:')) {
+                description = line.replace(/description:/i, '').trim()
               } else if (line.toLowerCase().includes('keywords:')) {
                 keywords = line
                   .replace(/keywords:/i, '')
@@ -119,6 +129,7 @@ Respond with only the title and keywords in the specified format.`
       return {
               filename,
               title,
+              description,
               keywords
       }
 
@@ -133,7 +144,8 @@ Respond with only the title and keywords in the specified format.`
 
   const generateMetadata = useCallback(async (
     input: ImageInput[],
-    onMetadataGenerated?: (result: MetadataResult) => void
+    onMetadataGenerated?: (result: MetadataResult) => void,
+    settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }
   ): Promise<MetadataResult[]> => {
     const validApiKeys = apiKeys.filter(key => key.isValid)
 
@@ -263,7 +275,7 @@ Respond with only the title and keywords in the specified format.`
                   } : null)
 
                   // Generate metadata
-                  const result = await generateMetadataForSingleImage(imageInput, currentApiKey)
+                  const result = await generateMetadataForSingleImage(imageInput, currentApiKey, settings)
                   results[imageIndex] = result
 
                   // Call the real-time callback immediately when metadata is generated
@@ -322,7 +334,8 @@ Respond with only the title and keywords in the specified format.`
                     results[imageIndex] = {
                       filename: imageInput.filename,
                       title: `Generated title for ${imageInput.filename}`,
-                      keywords: ['image', 'photo', 'picture', 'metadata', 'generated']
+                      keywords: ['image', 'photo', 'picture', 'metadata', 'generated'],
+                      description: `A generated description for ${imageInput.filename}`
                     }
 
                     // Update completed count for fallback
