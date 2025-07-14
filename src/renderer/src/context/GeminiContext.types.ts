@@ -10,6 +10,8 @@ export interface MetadataResult {
 export interface ImageInput {
   imageData: string
   filename: string
+  fileType?: 'image' | 'video' | 'vector'
+  originalData?: string // For vector files (SVG/EPS content)
 }
 
 export interface ProcessingProgress {
@@ -62,8 +64,30 @@ export interface GeminiContextType {
   apiKeys: ApiKeyInfo[]
   isValidatingAny: boolean
 
+  // Chat functionality
+  chat: (message: string, images?: string[], conversationHistory?: Array<{role: 'user' | 'assistant', content: string, images?: string[]}>) => Promise<string>
+  isLoading: boolean
+  error: string | null
+
   // Enhanced metadata generation with parallel processing
-  generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void, settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }) => Promise<MetadataResult[]>
+  generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void, settings?: {
+    titleWords: number;
+    keywordsCount: number;
+    descriptionWords: number;
+    keywordSettings?: {
+      singleWord: boolean;
+      doubleWord: boolean;
+      mixed: boolean;
+    }
+    customization?: {
+      customPrompt: boolean;
+      customPromptText: string;
+      prohibitedWords: boolean;
+      prohibitedWordsList: string;
+      transparentBackground: boolean;
+      silhouette: boolean;
+    }
+  }) => Promise<MetadataResult[]>
 
   // New prompt generation functionality
   generatePrompts: (request: PromptGenerationRequest) => Promise<PromptGenerationResult>
@@ -74,10 +98,9 @@ export interface GeminiContextType {
   // Stop metadata generation
   stopGeneration: () => void
 
-  // Processing state
-  isLoading: boolean
-  error: string | null
+  // Progress tracking
   processingProgress: ProcessingProgress | null
+  generationStartTime: number | null
 
   // Rate limiting info
   rateLimitInfo: { [apiKeyId: string]: RateLimitInfo }

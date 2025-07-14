@@ -151,7 +151,7 @@ const ApiKeyManager: React.FC<ApiKeyManagerProps> = ({ className = '' }) => {
           onClick={() => setShowAddForm(true)}
           className="px-4 py-2 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors flex items-center gap-2 whitespace-nowrap"
         >
-          
+
           Add API Key
         </button>
       </div>

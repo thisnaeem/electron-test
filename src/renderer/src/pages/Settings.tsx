@@ -293,9 +293,9 @@ const Settings = (): React.JSX.Element => {
   }
 
   return (
-    <div className="absolute top-10 left-20 right-0 bottom-0 flex bg-white dark:bg-[#1a1b23] overflow-hidden z-10">
+    <div className="absolute top-0 left-20 right-0 bottom-0 flex bg-white dark:bg-[#101113] overflow-hidden z-10">
       {/* Secondary Sidebar */}
-      <div className="w-52 flex-shrink-0 bg-white dark:bg-[#1a1b23] relative z-10">
+      <div className="w-52 flex-shrink-0 bg-white dark:bg-[#101113] relative z-10">
         <div className="p-4 pl-6">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 text-left">Settings</h2>
           <nav className="space-y-1">
@@ -324,7 +324,7 @@ const Settings = (): React.JSX.Element => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-y-auto bg-white dark:bg-[#1a1b23] relative z-0">
+      <div className="flex-1 overflow-y-auto bg-white dark:bg-[#101113] relative z-0">
         <div className="p-6 pb-20">
           <div className="max-w-4xl">
             {renderContent()}

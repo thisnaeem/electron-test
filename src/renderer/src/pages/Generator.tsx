@@ -9,10 +9,10 @@ import UploadProcessingModal from '../components/UploadProcessingModal'
 import { downloadMultiPlatformCSVs, ImageData } from '../utils/csvGenerator'
 
 const Generator = (): React.JSX.Element => {
-  const { generateMetadata, stopGeneration, isLoading, error, processingProgress } = useGemini()
+  const { generateMetadata, stopGeneration, isLoading, error, processingProgress, generationStartTime } = useGemini()
   const dispatch = useAppDispatch()
   const { files, metadata } = useAppSelector(state => state.files)
-  const { hasCompletedOnboarding, apiKeys } = useAppSelector(state => state.settings)
+  const { hasCompletedOnboarding, apiKeys, generationSettings } = useAppSelector(state => state.settings)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
 
@@ -35,6 +35,8 @@ const Generator = (): React.JSX.Element => {
     }
   }, [files, selectedImageId])
 
+
+
   const handleFilesAccepted = useCallback((files: File[] | ImageInput[]) => {
     console.log('Files accepted:', files.length)
   }, [])
@@ -43,7 +45,31 @@ const Generator = (): React.JSX.Element => {
     setSelectedImageId(imageId)
   }, [])
 
-  const handleProcess = useCallback(async (input: File[] | ImageInput[], settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }) => {
+    const handleProcess = useCallback(async (input: File[] | ImageInput[], settings?: {
+    titleWords: number;
+    keywordsCount: number;
+    descriptionWords: number;
+    keywordSettings?: {
+      singleWord: boolean;
+      doubleWord: boolean;
+      mixed: boolean;
+    }
+    customization?: {
+      customPrompt: boolean;
+      customPromptText: string;
+      prohibitedWords: boolean;
+      prohibitedWordsList: string;
+      transparentBackground: boolean;
+      silhouette: boolean;
+    }
+    titleCustomization?: {
+      titleStyle: string;
+      customPrefix: boolean;
+      prefixText: string;
+      customPostfix: boolean;
+      postfixText: string;
+    }
+  }) => {
     if (input.length === 0) return
 
     // Check if user has enough API keys to use the generator
@@ -128,10 +154,21 @@ const Generator = (): React.JSX.Element => {
       // Create ImageInput array from stored files for retry
       const imageInputs = files
         .filter(file => file.previewData && file.previewData.trim() !== '')
-        .map(file => ({
-          imageData: file.previewData,
-          filename: file.name
-        }))
+        .map(file => {
+          // For vector files (SVGs) that have been converted, update the filename to reflect the conversion
+          let processedFilename = file.name
+          if (file.fileType === 'vector' && file.name.toLowerCase().endsWith('.svg')) {
+            // Change .svg extension to .png since we converted it
+            processedFilename = file.name.replace(/\.svg$/i, '.png')
+          }
+
+          return {
+            imageData: file.previewData,
+            filename: processedFilename,
+            fileType: file.fileType || 'image',
+            originalData: file.originalData
+          }
+        })
 
       if (imageInputs.length > 0) {
         handleProcess(imageInputs as ImageInput[])
@@ -140,7 +177,6 @@ const Generator = (): React.JSX.Element => {
   }, [files, handleProcess])
 
   // Get selected platforms from settings outside of callback
-  const { generationSettings } = useAppSelector(state => state.settings)
 
   const handleExportCSV = useCallback(() => {
     if (metadata.length === 0) return
@@ -171,7 +207,7 @@ const Generator = (): React.JSX.Element => {
 
 
   return (
-    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
+    <div className="absolute top-0 left-20 right-0 bottom-0 min-h-screen flex items-center justify-center overflow-auto bg-white dark:bg-[#101113]">
       <div className="min-h-full w-full p-4 relative space-y-4">
         {/* Upload Processing Modal */}
         <UploadProcessingModal />
@@ -225,6 +261,7 @@ const Generator = (): React.JSX.Element => {
               total: processingProgress.total
             } : undefined}
             currentProcessingFilename={processingProgress?.currentFilename || null}
+            generationStartTime={generationStartTime}
             onMetadataUpdated={handleMetadataUpdated}
             onStopGeneration={stopGeneration}
           />

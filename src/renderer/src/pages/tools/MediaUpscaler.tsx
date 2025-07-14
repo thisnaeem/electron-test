@@ -6,7 +6,7 @@ const MediaUpscaler = (): React.JSX.Element => {
   }
 
   return (
-    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
+    <div className="absolute top-0 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
       <div className="p-8">
         <div className="max-w-4xl mx-auto">
           {/* Header */}
@@ -22,7 +22,7 @@ const MediaUpscaler = (): React.JSX.Element => {
           {/* Main Content */}
           <div className="bg-[#f6f6f8] dark:bg-[#2a2d3a] rounded-2xl p-8 text-center">
             <div className="mb-6">
-              
+
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
                 Professional Media Upscaling
               </h2>

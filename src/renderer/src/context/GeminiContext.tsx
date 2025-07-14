@@ -22,7 +22,8 @@ import { rateLimiter } from '../utils/rateLimiter'
 // Retry configuration
 const MAX_RETRIES = 5 // Increased from 3 to 5 for more aggressive retries
 const RETRY_DELAY = 500 // Reduced from 1000ms to 500ms for faster retries
-const PARALLEL_LIMIT = 5 // Maximum concurrent requests
+// Dynamic parallel limit based on available API keys (minimum 5, maximum 15)
+const getOptimalParallelLimit = (apiKeyCount: number): number => Math.min(Math.max(apiKeyCount, 5), 15)
 
 // Helper function to wait
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
@@ -34,23 +35,62 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
   const [processingProgress, setProcessingProgress] = useState<ProcessingProgress | null>(null)
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(null)
 
   // Use ref to track abort controller for cancelling requests
   const abortControllerRef = useRef<AbortController | null>(null)
   const stopRequestedRef = useRef<boolean>(false)
 
-  const generateMetadataForSingleImage = useCallback(async (
+    const generateMetadataForSingleImage = useCallback(async (
     imageInput: ImageInput,
     apiKeyInfo: ApiKeyInfo,
-    settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }
+    settings?: {
+      titleWords: number;
+      keywordsCount: number;
+      descriptionWords: number;
+      keywordSettings?: {
+        singleWord: boolean;
+        doubleWord: boolean;
+        mixed: boolean;
+      }
+      customization?: {
+        customPrompt: boolean;
+        customPromptText: string;
+        prohibitedWords: boolean;
+        prohibitedWordsList: string;
+        transparentBackground: boolean;
+        silhouette: boolean;
+      }
+      titleCustomization?: {
+        titleStyle: string;
+        customPrefix: boolean;
+        prefixText: string;
+        customPostfix: boolean;
+        postfixText: string;
+      }
+    }
   ): Promise<MetadataResult> => {
-    const { imageData, filename } = imageInput
+    const { imageData, filename, fileType, originalData } = imageInput
 
     try {
             // Check if base64 data is valid
             if (!imageData || !imageData.includes(',')) {
               throw new Error('Invalid image data')
             }
+
+      // Special handling for SVG files - they might need additional processing
+      if (filename.toLowerCase().endsWith('.svg') && fileType === 'vector') {
+        console.log(`🎨 Processing SVG file: ${filename}`)
+
+        // Ensure the SVG was properly converted to a raster image
+        if (!imageData.includes('data:image/')) {
+          throw new Error(`SVG file ${filename} was not properly converted to image format`)
+        }
+
+        // Log the conversion details for debugging
+        const imageSizeKB = Math.round(imageData.length / 1024)
+        console.log(`📏 SVG converted image size: ${imageSizeKB}KB`)
+      }
 
       // Record API usage for rate limiting
       rateLimiter.recordRequest(apiKeyInfo.id)
@@ -63,32 +103,175 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
       const titleWords = settings?.titleWords || 15
       const keywordsCount = settings?.keywordsCount || 45
       const descriptionWords = settings?.descriptionWords || 12
+      const keywordSettings = settings?.keywordSettings
+      const customization = settings?.customization
+      const titleCustomization = settings?.titleCustomization
 
-            const prompt = `Analyze this image and provide metadata in the following exact format:
+      // Determine keyword instruction based on settings
+      let keywordInstruction = 'Use single words or short phrases for keywords'
+      if (keywordSettings?.singleWord) {
+        keywordInstruction = 'Use ONLY single words for keywords (no phrases or compound words)'
+      } else if (keywordSettings?.doubleWord) {
+        keywordInstruction = 'Use ONLY two-word phrases for keywords (exactly 2 words each, no single words)'
+      } else if (keywordSettings?.mixed) {
+        keywordInstruction = 'Use a mix of single words and two-word phrases for keywords'
+      }
 
-Title: [A descriptive title in exactly ${titleWords} words]
+      // Handle prohibited words
+      let prohibitedWordsInstruction = ''
+      if (customization?.prohibitedWords && customization.prohibitedWordsList.trim()) {
+        const prohibitedList = customization.prohibitedWordsList.split(',').map(w => w.trim()).filter(w => w)
+        if (prohibitedList.length > 0) {
+          prohibitedWordsInstruction = `\n- NEVER use these prohibited words: ${prohibitedList.join(', ')}`
+        }
+      }
+
+      // Handle transparent background and silhouette
+      let titleSuffix = ''
+      const additionalKeywords: string[] = []
+
+      if (customization?.transparentBackground) {
+        titleSuffix += ' on transparent background'
+        additionalKeywords.push('transparent background')
+      }
+
+      if (customization?.silhouette) {
+        titleSuffix += ' silhouette'
+        additionalKeywords.push('silhouette')
+      }
+
+      // Get title style instruction
+      let titleStyleInstruction = ''
+      if (titleCustomization?.titleStyle) {
+        switch (titleCustomization.titleStyle) {
+          case 'seo-optimized':
+            titleStyleInstruction = ' Focus on SEO-friendly, keyword-rich titles that would rank well in search engines.'
+            break
+          case 'descriptive':
+            titleStyleInstruction = ' Create detailed, descriptive titles that focus on visual elements and specific details.'
+            break
+          case 'short-concise':
+            titleStyleInstruction = ' Generate brief, punchy titles that are concise and to the point.'
+            break
+          case 'creative':
+            titleStyleInstruction = ' Use artistic and imaginative language to create creative, engaging titles.'
+            break
+          case 'commercial':
+            titleStyleInstruction = ' Focus on business and commercial aspects, suitable for professional use.'
+            break
+          case 'emotional':
+            titleStyleInstruction = ' Create titles that evoke emotions and feelings, connecting with the viewer.'
+            break
+          default:
+            titleStyleInstruction = ' Generate engaging, descriptive titles suitable for stock photography.'
+        }
+      }
+
+      // Adjust keywords count if we need to add special keywords
+      const adjustedKeywordsCount = keywordsCount - additionalKeywords.length
+
+      // Create file type specific prompt
+      let mediaTypeDescription = 'image'
+      let analysisInstructions = 'Focus on objects, colors, style, mood, and context visible in the image'
+
+      if (fileType === 'video') {
+        mediaTypeDescription = 'video frame (extracted from a video file)'
+        analysisInstructions = `This is a frame extracted from the video file "${filename}". Analyze what you see in this frame and generate metadata that represents the overall video content. Focus on subjects, actions, setting, style, colors, mood, and cinematography visible in this frame. Consider this frame as representative of the video's content`
+      } else if (fileType === 'vector') {
+        mediaTypeDescription = 'vector graphic (SVG or EPS file)'
+        analysisInstructions = 'Focus on the design elements, style, colors, shapes, and intended use of this vector graphic'
+
+        // For vectors, also analyze original content if available
+        if (originalData) {
+          analysisInstructions += '. Consider the vector file content and design elements'
+        }
+      }
+
+      let basePrompt = `Analyze this ${mediaTypeDescription} and provide metadata in the following exact format:
+
+Title: [A descriptive title in exactly ${titleWords} words${titleSuffix ? `, ending with "${titleSuffix.trim()}"` : ''}]
 Description: [A descriptive summary in exactly ${descriptionWords} words]
-Keywords: [Exactly ${keywordsCount} relevant keywords separated by commas]
+Keywords: [Exactly ${adjustedKeywordsCount} relevant keywords separated by commas]
 
 Requirements:
-- Title must be exactly ${titleWords} words, descriptive and engaging, no extra characters must be one sentence only like most stock agency images has like adobe stock
-- Description must be exactly ${descriptionWords} words, providing a brief summary of the image content
-- Keywords must be ${keywordsCount} items, relevant to the image content
-- Focus on objects, colors, style, mood, and context visible in the image
-- Use single words or short phrases for keywords
-- Separate keywords with commas only
+- Title must be exactly ${titleWords} words, descriptive and engaging, no extra characters must be one sentence only like most stock agency ${mediaTypeDescription}s has like adobe stock${titleSuffix ? ` and must end with "${titleSuffix.trim()}"` : ''}${titleStyleInstruction}
+- Description must be exactly ${descriptionWords} words, providing a brief summary of the ${mediaTypeDescription} content
+- Keywords must be ${adjustedKeywordsCount} items, relevant to the ${mediaTypeDescription} content
+- ${analysisInstructions}
+- ${keywordInstruction}
+- Separate keywords with commas only${prohibitedWordsInstruction}
 
 Respond with only the title, description, and keywords in the specified format.`
 
-            const content: (string | Part)[] = [
-              prompt,
-              {
-                inlineData: {
-                  mimeType: 'image/jpeg',
-                  data: imageData.split(',')[1]
-                }
-              }
-            ]
+      // Add custom prompt if enabled
+      if (customization?.customPrompt && customization.customPromptText.trim()) {
+        basePrompt += `\n\nAdditional instructions: ${customization.customPromptText.trim()}`
+      }
+
+      const prompt = basePrompt
+
+      // For vector files, ensure we're using the converted image data
+      let processedImageData = imageData
+
+      // If this is a vector file and we have original data, the imageData should be the preview
+      if (fileType === 'vector' && originalData) {
+        // imageData should already be the converted preview image
+        processedImageData = imageData
+      }
+
+      // Enhanced validation for image data
+      if (!processedImageData || !processedImageData.includes('data:image/')) {
+        throw new Error(`Invalid image data format for ${filename}`)
+      }
+
+      // Validate base64 data structure
+      const dataParts = processedImageData.split(',')
+      if (dataParts.length !== 2 || !dataParts[1]) {
+        throw new Error(`Malformed base64 image data for ${filename}`)
+      }
+
+      // Improved MIME type detection from data URI
+      const headerPart = dataParts[0].toLowerCase()
+      let mimeType = 'image/png' // Default to PNG since we convert SVGs to PNG
+
+      if (headerPart.includes('image/png')) {
+        mimeType = 'image/png'
+      } else if (headerPart.includes('image/jpeg') || headerPart.includes('image/jpg')) {
+        mimeType = 'image/jpeg'
+      } else if (headerPart.includes('image/webp')) {
+        mimeType = 'image/webp'
+      }
+
+      // For vector files that were converted, always use PNG
+      if (fileType === 'vector') {
+        mimeType = 'image/png'
+        console.log(`🎨 Vector file ${filename} using PNG format after conversion`)
+      }
+
+      // Additional validation for base64 data quality
+      const base64Data = dataParts[1]
+      if (base64Data.length < 100) {
+        throw new Error(`Image data too small for ${filename} - likely corrupted`)
+      }
+
+      // Test if base64 is valid
+      try {
+        atob(base64Data.substring(0, Math.min(100, base64Data.length)))
+      } catch {
+        throw new Error(`Invalid base64 encoding for ${filename}`)
+      }
+
+      console.log(`📸 Processing ${filename} with detected MIME type: ${mimeType}`)
+
+      const content: (string | Part)[] = [
+        prompt,
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Data
+          }
+        }
+      ]
 
             const result = await model.generateContent(content)
             const response = result.response
@@ -118,6 +301,28 @@ Respond with only the title, description, and keywords in the specified format.`
               }
             }
 
+            // Add additional keywords for special features
+            if (additionalKeywords.length > 0) {
+              keywords = [...keywords, ...additionalKeywords]
+            }
+
+            // Apply title customization (prefix/postfix)
+            if (titleCustomization) {
+              let finalTitle = title
+
+              // Add prefix
+              if (titleCustomization.customPrefix && titleCustomization.prefixText.trim()) {
+                finalTitle = `${titleCustomization.prefixText.trim()} ${finalTitle}`
+              }
+
+              // Add postfix
+              if (titleCustomization.customPostfix && titleCustomization.postfixText.trim()) {
+                finalTitle = `${finalTitle} ${titleCustomization.postfixText.trim()}`
+              }
+
+              title = finalTitle
+            }
+
       // Validate response quality - if parsing failed or response is poor, throw error to retry
       if (!title || title.includes('Generated title for')) {
         throw new Error('Failed to generate proper title from API response')
@@ -142,10 +347,34 @@ Respond with only the title, description, and keywords in the specified format.`
     }
   }, [apiKeys, dispatch])
 
-  const generateMetadata = useCallback(async (
+    const generateMetadata = useCallback(async (
     input: ImageInput[],
     onMetadataGenerated?: (result: MetadataResult) => void,
-    settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }
+    settings?: {
+      titleWords: number;
+      keywordsCount: number;
+      descriptionWords: number;
+      keywordSettings?: {
+        singleWord: boolean;
+        doubleWord: boolean;
+        mixed: boolean;
+      }
+      customization?: {
+        customPrompt: boolean;
+        customPromptText: string;
+        prohibitedWords: boolean;
+        prohibitedWordsList: string;
+        transparentBackground: boolean;
+        silhouette: boolean;
+      }
+      titleCustomization?: {
+        titleStyle: string;
+        customPrefix: boolean;
+        prefixText: string;
+        customPostfix: boolean;
+        postfixText: string;
+      }
+    }
   ): Promise<MetadataResult[]> => {
     const validApiKeys = apiKeys.filter(key => key.isValid)
 
@@ -171,6 +400,7 @@ Respond with only the title, description, and keywords in the specified format.`
 
     setIsLoading(true)
     setError(null)
+    setGenerationStartTime(Date.now()) // Start timer
     stopRequestedRef.current = false // Reset stop flag for new generation
 
     // Initialize processing progress
@@ -191,6 +421,13 @@ Respond with only the title, description, and keywords in the specified format.`
       }
     })
 
+    console.log(`🚀 Starting metadata generation with ${validApiKeys.length} API keys:`, validApiKeys.map(k => k.name))
+    console.log(`📊 Optimal parallel limit: ${getOptimalParallelLimit(validApiKeys.length)} (based on ${validApiKeys.length} keys)`)
+
+    // Reset round-robin for fresh distribution ensuring we start from the first key
+    rateLimiter.resetRoundRobin()
+    console.log(`🔄 Round-robin distribution reset - will cycle through: ${validApiKeys.map(k => k.name).join(' → ')}`)
+
     setProcessingProgress(initialProgress)
 
     // Create abort controller for this operation
@@ -210,8 +447,11 @@ Respond with only the title, description, and keywords in the specified format.`
 
         const batch: Promise<void>[] = []
 
-        // Create batch of up to PARALLEL_LIMIT concurrent requests
-        for (let i = 0; i < PARALLEL_LIMIT && currentIndex < input.length; i++) {
+        // Create batch ensuring each request gets a different API key in round-robin order
+        const parallelLimit = getOptimalParallelLimit(validApiKeys.length)
+
+        // Process images with pre-assigned API keys for round-robin distribution
+        for (let i = 0; i < parallelLimit && currentIndex < input.length; i++) {
           // Check if stop was requested before processing each image
           if (stopRequestedRef.current) {
             console.log('🛑 Stop detected - halting image processing loop')
@@ -221,7 +461,7 @@ Respond with only the title, description, and keywords in the specified format.`
           const imageIndex = currentIndex++
           const imageInput = input[imageIndex]
 
-          // Get next available API key
+          // Get next available API key using strict round-robin
           const availableApiKey = rateLimiter.getNextAvailableApiKey(validApiKeys)
 
           if (!availableApiKey) {
@@ -238,6 +478,8 @@ Respond with only the title, description, and keywords in the specified format.`
           }
 
           if (availableApiKey) {
+            console.log(`📤 Assigning ${imageInput.filename} to ${availableApiKey.name} (round-robin distribution)`)
+
             const processPromise = (async () => {
               let retryCount = 0
               let lastError: Error | null = null
@@ -308,6 +550,35 @@ Respond with only the title, description, and keywords in the specified format.`
                   lastError = error instanceof Error ? error : new Error(String(error))
                   retryCount++
 
+                  // Check for specific image validation errors
+                  const errorMessage = lastError.message.toLowerCase()
+                  const isImageValidationError = errorMessage.includes('provided image is not valid') ||
+                                               errorMessage.includes('invalid image') ||
+                                               errorMessage.includes('image format')
+
+                  if (isImageValidationError && imageInput.fileType === 'vector' && imageInput.filename.toLowerCase().endsWith('.svg')) {
+                    console.error(`🎨 SVG conversion issue for ${imageInput.filename}: ${lastError.message}`)
+
+                    // For SVG files with image validation errors, create a more descriptive fallback
+                    if (retryCount > 2) { // Give up after a few retries for image validation issues
+                      console.warn(`⚠️ SVG conversion failed for ${imageInput.filename}, creating vector-specific fallback`)
+                      results[imageIndex] = {
+                        filename: imageInput.filename,
+                        title: `Vector Graphic Design Element ${imageInput.filename.replace('.svg', '')}`,
+                        keywords: ['vector', 'graphic', 'design', 'svg', 'illustration', 'icon', 'element', 'digital', 'art', 'symbol', 'logo', 'scalable', 'graphic design', 'visual', 'creative'],
+                        description: `Scalable vector graphic design element ideal for digital projects and branding applications`
+                      }
+
+                      // Update completed count for fallback
+                      setProcessingProgress(prev => prev ? {
+                        ...prev,
+                        completed: prev.completed + 1
+                      } : null)
+
+                      return
+                    }
+                  }
+
                   console.error(`❌ Attempt ${retryCount} failed for ${imageInput.filename}:`, lastError.message)
 
                   // Update error stats only for the API key that actually failed
@@ -331,12 +602,27 @@ Respond with only the title, description, and keywords in the specified format.`
                   // If we've exhausted all retries, only then use fallback
                   if (retryCount > MAX_RETRIES) {
                     console.warn(`⚠️ All retries exhausted for ${imageInput.filename}, using fallback`)
-                    results[imageIndex] = {
-                      filename: imageInput.filename,
-                      title: `Generated title for ${imageInput.filename}`,
-                      keywords: ['image', 'photo', 'picture', 'metadata', 'generated'],
-                      description: `A generated description for ${imageInput.filename}`
+
+                    // Create better fallback based on file type
+                    let fallbackResult: MetadataResult
+
+                    if (imageInput.fileType === 'vector' && imageInput.filename.toLowerCase().endsWith('.svg')) {
+                      fallbackResult = {
+                        filename: imageInput.filename,
+                        title: `Vector Graphic Design Element ${imageInput.filename.replace('.svg', '')}`,
+                        keywords: ['vector', 'graphic', 'design', 'svg', 'illustration', 'icon', 'element', 'digital', 'art', 'symbol', 'logo', 'scalable', 'graphic design', 'visual', 'creative'],
+                        description: `Scalable vector graphic design element ideal for digital projects and branding applications`
+                      }
+                    } else {
+                      fallbackResult = {
+                        filename: imageInput.filename,
+                        title: `Generated title for ${imageInput.filename}`,
+                        keywords: ['image', 'photo', 'picture', 'metadata', 'generated'],
+                        description: `A generated description for ${imageInput.filename}`
+                      }
                     }
+
+                    results[imageIndex] = fallbackResult
 
                     // Update completed count for fallback
                     setProcessingProgress(prev => prev ? {
@@ -376,13 +662,29 @@ Respond with only the title, description, and keywords in the specified format.`
       await processNextBatch()
 
       // Final progress update
-      setProcessingProgress(prev => prev ? {
-        ...prev,
-        currentFilename: null,
-        currentApiKeyId: null
-      } : null)
+      setProcessingProgress(prev => {
+        if (!prev) return null
+
+        // Log final statistics for each API key
+        const totalTime = generationStartTime ? Date.now() - generationStartTime : 0
+        const totalTimeFormatted = totalTime > 0 ? `${(totalTime / 1000).toFixed(1)}s` : '0s'
+
+        console.log('📈 Final API Key Usage Statistics:')
+        console.log(`⏱️ Total generation time: ${totalTimeFormatted}`)
+        Object.entries(prev.processingStats).forEach(([keyId, stats]) => {
+          const keyName = validApiKeys.find(k => k.id === keyId)?.name || keyId
+          console.log(`  ${keyName}: ${stats.processed} processed, ${stats.errors} errors`)
+        })
+
+        return {
+          ...prev,
+          currentFilename: null,
+          currentApiKeyId: null
+        }
+      })
 
       setIsLoading(false)
+      setGenerationStartTime(null) // Clear timer
       return results.filter(result => result) // Filter out any undefined results
 
     } catch (error) {
@@ -665,6 +967,151 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
     }
   }, [apiKeys, apiKey, isApiKeyValid, dispatch])
 
+  // Chat functionality
+  const chat = useCallback(async (message: string, images?: string[], conversationHistory?: Array<{role: 'user' | 'assistant', content: string, images?: string[]}>): Promise<string> => {
+    const validApiKeys = apiKeys.filter(key => key.isValid)
+
+    if (validApiKeys.length === 0) {
+      // Fallback to legacy single API key if no valid multiple keys
+      if (!apiKey || !isApiKeyValid) {
+        throw new Error('No valid API keys available. Please add and validate API keys in Settings.')
+      }
+
+      // Use legacy single key processing
+      const legacyKey: ApiKeyInfo = {
+        id: 'legacy',
+        key: apiKey,
+        isValid: isApiKeyValid,
+        isValidating: false,
+        validationError: null,
+        requestCount: 0,
+        lastRequestTime: Date.now(),
+        name: 'Legacy API Key'
+      }
+      validApiKeys.push(legacyKey)
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      // Get next available API key
+      const availableApiKey = rateLimiter.getNextAvailableApiKey(validApiKeys)
+      if (!availableApiKey) {
+        throw new Error('No API keys available. Please try again later.')
+      }
+
+      // Record API usage for rate limiting
+      rateLimiter.recordRequest(availableApiKey.id)
+      dispatch(incrementApiKeyUsage(availableApiKey.id))
+
+      const genAI = new GoogleGenerativeAI(availableApiKey.key)
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+
+      // Build conversation context if history is provided
+      let conversationContext = ''
+      if (conversationHistory && conversationHistory.length > 0) {
+        conversationContext = 'Previous conversation context:\n'
+
+        // Include last 10 messages for context (to avoid token limits)
+        const recentHistory = conversationHistory.slice(-10)
+
+        for (const historyItem of recentHistory) {
+          if (historyItem.role === 'user') {
+            conversationContext += `User: ${historyItem.content}\n`
+            if (historyItem.images && historyItem.images.length > 0) {
+              conversationContext += `[User uploaded ${historyItem.images.length} image(s)]\n`
+            }
+          } else {
+            conversationContext += `Assistant: ${historyItem.content}\n`
+          }
+        }
+        conversationContext += '\nCurrent message:\n'
+      }
+
+      // Prepare content array with conversation context, current message, and images
+      const content: (string | Part)[] = []
+
+      // Add conversation context and current message
+      const fullMessage = conversationContext ? `${conversationContext}${message}` : message
+      content.push(fullMessage)
+
+      // Add images if provided
+      if (images && images.length > 0) {
+        for (const imageData of images) {
+          // Validate image data
+          if (!imageData || !imageData.includes(',')) {
+            console.warn('Invalid image data provided to chat, skipping')
+            continue
+          }
+
+          // Extract base64 data and determine MIME type
+          const dataParts = imageData.split(',')
+          if (dataParts.length !== 2) {
+            console.warn('Malformed image data provided to chat, skipping')
+            continue
+          }
+
+          const headerPart = dataParts[0].toLowerCase()
+          let mimeType = 'image/png' // Default
+
+          if (headerPart.includes('image/png')) {
+            mimeType = 'image/png'
+          } else if (headerPart.includes('image/jpeg') || headerPart.includes('image/jpg')) {
+            mimeType = 'image/jpeg'
+          } else if (headerPart.includes('image/webp')) {
+            mimeType = 'image/webp'
+          } else if (headerPart.includes('image/gif')) {
+            mimeType = 'image/gif'
+          }
+
+          const base64Data = dataParts[1]
+
+          // Validate base64 data
+          if (base64Data.length < 100) {
+            console.warn('Image data too small, likely corrupted, skipping')
+            continue
+          }
+
+          // Test if base64 is valid
+          try {
+            atob(base64Data.substring(0, Math.min(100, base64Data.length)))
+          } catch {
+            console.warn('Invalid base64 encoding in image, skipping')
+            continue
+          }
+
+          // Add image to content
+          content.push({
+            inlineData: {
+              mimeType: mimeType,
+              data: base64Data
+            }
+          })
+
+          console.log(`📸 Added image to chat with MIME type: ${mimeType}`)
+        }
+      }
+
+      const result = await model.generateContent(content)
+      const response = result.response
+      const text = response.text()
+
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from Gemini API')
+      }
+
+      return text
+
+    } catch (error) {
+      console.error('Chat error:', error)
+      setError(error instanceof Error ? error.message : 'Failed to get response')
+      throw error
+    } finally {
+      setIsLoading(false)
+    }
+  }, [apiKeys, apiKey, isApiKeyValid, dispatch])
+
   // Statistics function
   const getApiKeyStats = useCallback(() => {
     const totalKeys = apiKeys.length
@@ -710,6 +1157,7 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
     isLoading,
     error,
     processingProgress,
+    generationStartTime,
 
     // Rate limiting
     rateLimitInfo: rateLimiter.getAllRateLimitInfo(),
@@ -720,7 +1168,10 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
     validateApiKey: handleValidateApiKey,
 
     // Statistics
-    getApiKeyStats
+    getApiKeyStats,
+
+    // Chat
+    chat
   }
 
   return (

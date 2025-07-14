@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { addFile, saveImagePreview, setUploadProcessing, updateUploadProgress } from '../store/slices/filesSlice'
 import uploadIcon from '../assets/icons/image-upload-stroke-rounded.svg'
 import addSquareIcon from '../assets/icons/add-square-stroke-rounded.svg'
+import { processMediaFile, validateFile } from '../utils/fileProcessor'
 
 interface ImageUploaderProps {
   onFilesAccepted: (files: File[]) => void
@@ -110,19 +111,12 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         return
       }
 
-      // Filter for valid image files
+      // Filter for valid files (images, videos, vectors)
       const validFiles = incomingFiles.filter(file => {
-        const isValidType = file.type.startsWith('image/') &&
-          ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
-        const isValidSize = file.size <= 20 * 1024 * 1024 // 20MB limit
+        const validation = validateFile(file)
 
-        if (!isValidType) {
-          setError(`${file.name} is not a supported image format. Please use JPEG, PNG, GIF, or WebP.`)
-          return false
-        }
-
-        if (!isValidSize) {
-          setError(`${file.name} is too large. Please use images smaller than 20MB.`)
+        if (!validation.isValid) {
+          setError(validation.error || 'Invalid file')
           return false
         }
 
@@ -144,43 +138,38 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         // Update progress - show current file being processed
         dispatch(updateUploadProgress({ current: i, currentFileName: file.name }))
 
+        // Process the media file (images, videos, vectors)
+        const processedData = await processMediaFile(file)
+
         // Create file data object
         const fileData = {
           id: fileId,
-        name: file.name,
-        type: file.type,
+          name: file.name,
+          type: file.type,
           size: file.size,
-        lastModified: file.lastModified,
+          lastModified: file.lastModified,
           previewPath: '',
-          previewData: ''
+          previewData: processedData.previewData,
+          fileType: processedData.fileType,
+          originalData: processedData.originalData
         }
 
-        // Create preview with compression
-        await new Promise<void>((resolve) => {
-        const reader = new FileReader()
-        reader.onload = async (e) => {
-          if (e.target?.result) {
-            const previewData = e.target.result as string
-
-            // Compress image if needed for better performance
-            const compressedData = await compressImageIfNeeded(previewData, file.size)
-
-            // Save preview to file system
-            const filename = `${fileId}.png`
-            await dispatch(saveImagePreview({ filename, imageData: compressedData }))
-
-            // Add file to store with preview data
-            dispatch(addFile({
-              ...fileData,
-              previewPath: filename,
-              previewData: compressedData
-            }))
-
-              resolve()
-          }
+        // For images, apply compression if needed
+        let finalPreviewData = processedData.previewData
+        if (processedData.fileType === 'image') {
+          finalPreviewData = await compressImageIfNeeded(processedData.previewData, file.size)
         }
-        reader.readAsDataURL(file)
-        })
+
+        // Save preview to file system
+        const filename = `${fileId}.png`
+        await dispatch(saveImagePreview({ filename, imageData: finalPreviewData }))
+
+        // Add file to store with preview data
+        dispatch(addFile({
+          ...fileData,
+          previewPath: filename,
+          previewData: finalPreviewData
+        }))
       }
 
       // Update final progress to show completion
@@ -237,7 +226,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
     const input = document.createElement('input')
     input.type = 'file'
     input.multiple = true
-    input.accept = 'image/jpeg,image/png,image/gif,image/webp'
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/ogg,video/avi,video/mov,video/quicktime,.eps,.svg'
     input.onchange = (e) => {
       const target = e.target as HTMLInputElement
       if (target.files) {
@@ -267,10 +256,11 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
 
       <div
             className={`
-          rounded-xl p-8 transition-all duration-200 ease-in-out bg-[#f9fafb] w-3/4 max-w-3xl h-96 flex items-center justify-center
-          ${isDragOver ? 'bg-violet-50' : 'hover:bg-gray-100'}
+          rounded-xl p-8 transition-all duration-200 ease-in-out bg-[#f3f4f6] dark:bg-[#141517] w-3/4 max-w-3xl h-96 flex items-center justify-center
+          ${isDragOver ? 'ring-4 ring-violet-400 dark:ring-violet-600' : 'hover:ring-4 hover:ring-blue-300 dark:hover:ring-blue-700'}
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
-            `}
+           dark:text-white
+          `}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -282,14 +272,14 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
               <img
                 src={isHovering ? addSquareIcon : uploadIcon}
                 alt="Upload"
-                className="w-16 h-16 mb-4 transition-all duration-200"
+                className="w-16 h-16 mb-4 transition-all duration-200 dark:invert"
                 draggable="false"
               />
-              <p className="text-lg font-medium text-gray-700 mb-2">
-            {isDragOver ? 'Drop images here' : 'Drop images here or click to upload'}
+              <p className="text-lg font-medium text-gray-700 mb-2 dark:text-white">
+            {isDragOver ? 'Drop files here' : 'Drop files here or click to upload'}
               </p>
-              <p className="text-sm text-gray-500">
-            Supported formats: JPEG, PNG, GIF, WebP (max 20MB, up to 1000 files)
+              <p className="text-sm text-gray-500 dark:text-white">
+            Images, Videos - up to 1000 files
               </p>
             </div>
               </div>

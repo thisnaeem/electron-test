@@ -1,7 +1,7 @@
 import { useAppDispatch, useAppSelector } from '../store/hooks'
 import { removeFile, clearFiles, deleteImagePreview, clearAllPreviews, addFile, saveImagePreview, MetadataResult } from '../store/slices/filesSlice'
 import { ImageInput } from '../context/GeminiContext.types'
-import { useState, useCallback, memo } from 'react'
+import { useState, useCallback, memo, useEffect } from 'react'
 import GenerationSettingsModal from './GenerationSettingsModal'
 import ExportDropdown from './ExportDropdown'
 
@@ -30,7 +30,24 @@ const Tooltip = ({ children, text }: { children: React.ReactNode; text: string }
 
 interface UploadedImagesDisplayProps {
   onClear: () => void
-  onProcess?: (files: File[] | ImageInput[], settings?: { titleWords: number; keywordsCount: number; descriptionWords: number }) => void
+    onProcess?: (files: File[] | ImageInput[], settings?: {
+    titleWords: number;
+    keywordsCount: number;
+    descriptionWords: number;
+    keywordSettings?: {
+      singleWord: boolean;
+      doubleWord: boolean;
+      mixed: boolean;
+    }
+    customization?: {
+      customPrompt: boolean;
+      customPromptText: string;
+      prohibitedWords: boolean;
+      prohibitedWordsList: string;
+      transparentBackground: boolean;
+      silhouette: boolean;
+    }
+  }) => void
   onFilesAccepted: (files: File[] | ImageInput[]) => void
   onImageRemoved?: (filename: string) => void
   onImageSelected?: (imageId: string) => void
@@ -41,11 +58,12 @@ interface UploadedImagesDisplayProps {
   onExportCSV?: () => void
   processingProgress?: { current: number; total: number }
   currentProcessingFilename?: string | null
+  generationStartTime?: number | null
   onMetadataUpdated?: (filename: string, updatedMetadata: { title: string; keywords: string[]; description?: string }) => void
   onStopGeneration?: () => void
 }
 
-const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onImageRemoved, onImageSelected, selectedImageId, hasMetadata, metadataResults, isProcessing, onExportCSV, processingProgress, currentProcessingFilename, onMetadataUpdated, onStopGeneration }: UploadedImagesDisplayProps): React.JSX.Element => {
+const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onImageRemoved, onImageSelected, selectedImageId, hasMetadata, metadataResults, isProcessing, onExportCSV, processingProgress, currentProcessingFilename, generationStartTime, onMetadataUpdated, onStopGeneration }: UploadedImagesDisplayProps): React.JSX.Element => {
   const dispatch = useAppDispatch()
   const { files, isLoading } = useAppSelector(state => state.files)
   const [showClearConfirmation, setShowClearConfirmation] = useState(false)
@@ -56,6 +74,33 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
   const [isProcessingFiles, setIsProcessingFiles] = useState(false)
   const [processingCount, setProcessingCount] = useState(0)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
+  const [elapsedTime, setElapsedTime] = useState<string>('0s')
+
+  // Update timer every second when generation is running
+  useEffect(() => {
+    if (!generationStartTime || !isProcessing) {
+      setElapsedTime('0s')
+      return
+    }
+
+    const updateTimer = (): void => {
+      const elapsed = Date.now() - generationStartTime
+      const seconds = Math.floor(elapsed / 1000)
+
+      if (seconds < 60) {
+        setElapsedTime(`${seconds}s`)
+      } else {
+        const minutes = Math.floor(seconds / 60)
+        const remainingSeconds = seconds % 60
+        setElapsedTime(`${minutes}m ${remainingSeconds}s`)
+      }
+    }
+
+    updateTimer() // Initial update
+    const interval = setInterval(updateTimer, 1000)
+
+    return () => clearInterval(interval)
+  }, [generationStartTime, isProcessing])
 
   const handleGenerateMetadata = useCallback((): void => {
     if (files.length > 0) {
@@ -75,7 +120,24 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
     }
   }, [files, metadataResults])
 
-  const handleConfirmGeneration = useCallback((settings: { titleWords: number; keywordsCount: number; descriptionWords: number }): void => {
+    const handleConfirmGeneration = useCallback((settings: {
+    titleWords: number;
+    keywordsCount: number;
+    descriptionWords: number;
+    keywordSettings?: {
+      singleWord: boolean;
+      doubleWord: boolean;
+      mixed: boolean;
+    }
+    customization?: {
+      customPrompt: boolean;
+      customPromptText: string;
+      prohibitedWords: boolean;
+      prohibitedWordsList: string;
+      transparentBackground: boolean;
+      silhouette: boolean;
+    }
+  }): void => {
     if (files.length > 0) {
       // Filter files that don't have metadata yet
       const filesToProcess = files.filter(file =>
@@ -86,10 +148,21 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
       if (filesToProcess.length > 0) {
         // Process files with settings
-        const imageInputs: ImageInput[] = filesToProcess.map(file => ({
-          imageData: file.previewData || '',
-          filename: file.name
-        }))
+        const imageInputs: ImageInput[] = filesToProcess.map(file => {
+          // For vector files (SVGs) that have been converted, update the filename to reflect the conversion
+          let processedFilename = file.name
+          if (file.fileType === 'vector' && file.name.toLowerCase().endsWith('.svg')) {
+            // Change .svg extension to .png since we converted it
+            processedFilename = file.name.replace(/\.svg$/i, '.png')
+          }
+
+          return {
+            imageData: file.previewData || '',
+            filename: processedFilename,
+            fileType: file.fileType || 'image',
+            originalData: file.originalData
+          }
+        })
 
         if (onProcess) {
           // Pass settings to the processing function
@@ -236,19 +309,15 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
     try {
 
-      // Filter for valid image files
+      // Import file validation function
+      const { validateFile } = await import('../utils/fileProcessor')
+
+      // Filter for valid files (images, videos, vectors)
       const validFiles = filesToProcess.filter(file => {
-        const isValidType = file.type.startsWith('image/') &&
-          ['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.type)
-        const isValidSize = file.size <= 20 * 1024 * 1024 // 20MB limit
+        const validation = validateFile(file)
 
-        if (!isValidType) {
-          console.error(`${file.name} is not a supported image format.`)
-          return false
-        }
-
-        if (!isValidSize) {
-          console.error(`${file.name} is too large. Please use images smaller than 20MB.`)
+        if (!validation.isValid) {
+          console.error(validation.error || 'Invalid file')
           return false
         }
 
@@ -274,6 +343,10 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
               try {
                 const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${i + index}`
 
+                // Process the media file (images, videos, vectors)
+                const { processMediaFile } = await import('../utils/fileProcessor')
+                const processedData = await processMediaFile(file)
+
                 // Create file data object
                 const fileData = {
                   id: fileId,
@@ -282,44 +355,29 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                   size: file.size,
                   lastModified: file.lastModified,
                   previewPath: '',
-                  previewData: ''
+                  previewData: processedData.previewData,
+                  fileType: processedData.fileType,
+                  originalData: processedData.originalData
                 }
 
-                // Create preview with optimized image processing
-                const reader = new FileReader()
-                reader.onload = async (e) => {
-                  try {
-                    if (e.target?.result) {
-                      const previewData = e.target.result as string
-
-                      // Compress image if it's too large for better performance
-                      const compressedData = await compressImageIfNeeded(previewData, file.size)
-
-                      // Save preview to file system
-                      const filename = `${fileId}.png`
-                      await dispatch(saveImagePreview({ filename, imageData: compressedData }))
-
-                      // Add file to store with preview data
-                      dispatch(addFile({
-                        ...fileData,
-                        previewPath: filename,
-                        previewData: compressedData
-                      }))
-
-                      setProcessingCount(prev => prev - 1)
-                    }
-                  } catch (error) {
-                    console.error('Error processing file:', file.name, error)
-                    setProcessingCount(prev => prev - 1)
-                  }
-                  resolve()
+                // For images, apply compression if needed
+                let finalPreviewData = processedData.previewData
+                if (processedData.fileType === 'image') {
+                  finalPreviewData = await compressImageIfNeeded(processedData.previewData, file.size)
                 }
-                reader.onerror = () => {
-                  console.error('Error reading file:', file.name)
-                  setProcessingCount(prev => prev - 1)
-                  resolve()
-                }
-                reader.readAsDataURL(file)
+
+                // Save preview to file system
+                const filename = `${fileId}.png`
+                await dispatch(saveImagePreview({ filename, imageData: finalPreviewData }))
+
+                // Add file to store with preview data
+                dispatch(addFile({
+                  ...fileData,
+                  previewPath: filename,
+                  previewData: finalPreviewData
+                }))
+
+                setProcessingCount(prev => prev - 1)
               } catch (error) {
                 console.error('Error setting up file processing:', file.name, error)
                 setProcessingCount(prev => prev - 1)
@@ -356,7 +414,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
     const input = document.createElement('input')
     input.type = 'file'
     input.multiple = true
-    input.accept = 'image/jpeg,image/png,image/gif,image/webp'
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/ogg,video/avi,video/mov,video/quicktime,.eps,.svg'
 
     // Set webkitdirectory to false to ensure we're selecting files, not directories
     input.webkitdirectory = false
@@ -542,7 +600,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 10h6v4H9z" />
               </svg>
-              Stop ({processingProgress ? `${processingProgress.current}/${processingProgress.total}` : 'Processing...'})
+              Stop ({processingProgress ? `${processingProgress.current}/${processingProgress.total}` : 'Processing...'}{generationStartTime ? ` • ${elapsedTime}` : ''})
             </button>
           ) : (
           <button
@@ -665,6 +723,13 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                   </div>
                 )}
               </div>
+
+              {/* File type indicator */}
+              {file.fileType && file.fileType !== 'image' && (
+                <div className="absolute top-2 left-2 bg-gray-800 bg-opacity-75 text-white text-xs px-2 py-1 rounded-full">
+                  {file.fileType === 'video' ? '🎬' : '📐'}
+                </div>
+              )}
 
               {/* Selection indicator */}
               {isSelected && (

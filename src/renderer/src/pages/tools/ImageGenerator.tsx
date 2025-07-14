@@ -337,7 +337,7 @@ const ImageGenerator = (): React.JSX.Element => {
 
   return (
     <div
-      className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23] pb-24"
+      className="absolute top-0 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#101113] pb-24"
       onClick={handleClickOutside}
     >
       <div className="p-6 max-w-full">

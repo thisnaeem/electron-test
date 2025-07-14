@@ -444,7 +444,7 @@ const Help = (): React.JSX.Element => {
   }
 
   return (
-    <div className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]">
+    <div className="absolute top-0 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#101113]">
       <div className="flex h-full">
         {/* Sidebar */}
         <div className="w-64 bg-[#f6f6f8] dark:bg-[#2a2d3a] p-6 overflow-y-auto">

@@ -1,5 +1,5 @@
 import { HashRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 
 import Generator from './pages/Generator'
 import ImageGenerator from './pages/tools/ImageGenerator'
@@ -10,14 +10,14 @@ import PromptGenerator from './pages/tools/PromptGenerator'
 import FileProcessor from './pages/tools/FileProcessor'
 import MediaUpscaler from './pages/tools/MediaUpscaler'
 import AdobeScrapper from './pages/tools/AdobeScrapper'
+import ChatInterface from './pages/tools/ChatInterface'
 
 import { GeminiProvider } from './context/GeminiContext'
 import Sidebar from './components/Sidebar'
 import Settings from './pages/Settings'
 import Help from './pages/Help'
 import UpdateNotification from './components/UpdateNotification'
-import TitleBar from './components/TitleBar'
-import SplashScreen from './components/SplashScreen'
+
 import { useAppSelector, useAppDispatch } from './store/hooks'
 import { setDarkMode } from './store/slices/settingsSlice'
 import analytics from './services/analytics'
@@ -26,7 +26,7 @@ import analytics from './services/analytics'
 function AppContent(): React.JSX.Element {
   const location = useLocation()
   const { analyticsEnabled } = useAppSelector(state => state.settings)
-  const isContentPage = location.pathname === '/generator' || location.pathname === '/settings' || location.pathname === '/help' || location.pathname === '/image-generator' || location.pathname === '/background-remover' || location.pathname === '/youtube-transcriber' || location.pathname === '/file-converter' || location.pathname === '/prompt-generator' || location.pathname === '/file-processor' || location.pathname === '/media-upscaler' || location.pathname === '/adobe-scrapper'
+  const isContentPage = location.pathname === '/generator' || location.pathname === '/settings' || location.pathname === '/help' || location.pathname === '/image-generator' || location.pathname === '/background-remover' || location.pathname === '/youtube-transcriber' || location.pathname === '/file-converter' || location.pathname === '/prompt-generator' || location.pathname === '/file-processor' || location.pathname === '/media-upscaler' || location.pathname === '/adobe-scrapper' || location.pathname === '/chat'
 
   // Track page views when location changes
   useEffect(() => {
@@ -78,28 +78,68 @@ function AppContent(): React.JSX.Element {
   }, [])
 
   return (
-    <div className="min-h-screen">
-      <TitleBar />
-      <div className="flex pt-10">
+    <div className="min-h-screen bg-white dark:bg-[#101113]">
+      <div className="flex h-screen">
         <Sidebar />
-        <div className={`flex-1 overflow-auto transition-all duration-200 ml-20 ${isContentPage ? 'bg-white dark:bg-[#1a1b23]' : ''}`}>
-          <div className="px-8 py-8">
             <Routes>
               <Route path="/" element={<Navigate to="/generator" replace />} />
-              <Route path="/generator" element={<Generator />} />
-              <Route path="/image-generator" element={<ImageGenerator />} />
-              <Route path="/background-remover" element={<BackgroundRemover />} />
-              <Route path="/youtube-transcriber" element={<YouTubeTranscriber />} />
-              <Route path="/file-converter" element={<FileConverter />} />
-              <Route path="/prompt-generator" element={<PromptGenerator />} />
-              <Route path="/file-processor" element={<FileProcessor />} />
-              <Route path="/media-upscaler" element={<MediaUpscaler />} />
-              <Route path="/adobe-scrapper" element={<AdobeScrapper />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/help" element={<Help />} />
-            </Routes>
+          <Route path="/generator" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><Generator /></div>
+            </div>
+          } />
+              <Route path="/chat" element={<ChatInterface />} />
+          <Route path="/image-generator" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><ImageGenerator /></div>
+            </div>
+          } />
+          <Route path="/background-remover" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><BackgroundRemover /></div>
+            </div>
+          } />
+          <Route path="/youtube-transcriber" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><YouTubeTranscriber /></div>
+            </div>
+          } />
+          <Route path="/file-converter" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><FileConverter /></div>
+            </div>
+          } />
+          <Route path="/prompt-generator" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><PromptGenerator /></div>
+            </div>
+          } />
+          <Route path="/file-processor" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><FileProcessor /></div>
+            </div>
+          } />
+          <Route path="/media-upscaler" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><MediaUpscaler /></div>
+            </div>
+          } />
+          <Route path="/adobe-scrapper" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><AdobeScrapper /></div>
+            </div>
+          } />
+          <Route path="/settings" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><Settings /></div>
           </div>
+          } />
+          <Route path="/help" element={
+            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+              <div className="py-8"><Help /></div>
         </div>
+          } />
+        </Routes>
         <UpdateNotification />
       </div>
     </div>
@@ -109,8 +149,6 @@ function AppContent(): React.JSX.Element {
 function App(): React.JSX.Element {
   const dispatch = useAppDispatch()
   const { isDarkMode, analyticsEnabled } = useAppSelector(state => state.settings)
-  const [showSplash, setShowSplash] = useState(false)
-  const [isInitialized, setIsInitialized] = useState(false)
 
   // Initialize analytics
   useEffect(() => {
@@ -144,51 +182,13 @@ function App(): React.JSX.Element {
     if (isDarkMode !== savedDarkMode) {
       dispatch(setDarkMode(savedDarkMode))
     }
-
-    // Check if splash screen should be shown
-    const shouldShowSplash = (): boolean => {
-      // Force show splash in development if URL contains ?splash=true
-      const urlParams = new URLSearchParams(window.location.search)
-      if (urlParams.get('splash') === 'true') {
-        return true
-      }
-
-      const lastShown = localStorage.getItem('splash-shown')
-
-      if (!lastShown) {
-        // First time - show splash
-        return true
-      }
-
-      // Show splash if it's been more than 1 minute since last shown (for development)
-      const oneMinute = 60 * 1000
-      const timeSinceLastShown = Date.now() - parseInt(lastShown)
-
-      return timeSinceLastShown > oneMinute
-    }
-
-    setShowSplash(shouldShowSplash())
-    setIsInitialized(true)
   }, [dispatch, isDarkMode])
-
-  const handleSplashComplete = (): void => {
-    setShowSplash(false)
-  }
-
-  // Don't render anything until we've determined whether to show splash
-  if (!isInitialized) {
-    return <div className="fixed inset-0 bg-gray-900" />
-  }
 
   return (
     <GeminiProvider>
-      {showSplash ? (
-        <SplashScreen onComplete={handleSplashComplete} />
-      ) : (
         <Router>
           <AppContent />
         </Router>
-      )}
     </GeminiProvider>
   )
 }

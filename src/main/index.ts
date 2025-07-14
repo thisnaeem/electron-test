@@ -116,8 +116,8 @@ function createWindow(): void {
     minHeight: 600, // Minimum height to ensure proper layout
     show: false,
     autoHideMenuBar: true,
-    frame: false, // Custom title bar
-    ...(process.platform === 'linux' ? { icon: join(__dirname, '../../resources/icon.png') } : {}),
+    frame: true, // Use default title bar
+    icon: join(__dirname, '../../resources/app-logo.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -154,6 +154,11 @@ function createWindow(): void {
 app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('CSV Gen Pro')
+
+  // Set app icon for taskbar
+  if (process.platform === 'win32') {
+    app.setAppUserModelId('CSV Gen Pro')
+  }
 
 
 

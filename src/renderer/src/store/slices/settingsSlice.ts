@@ -45,6 +45,26 @@ interface SettingsState {
     keywordsCount: number
     descriptionWords: number
     platforms: string[] // Array of selected platforms: 'freepik', 'shutterstock', 'adobe-stock'
+    keywordSettings?: {
+      singleWord: boolean
+      doubleWord: boolean
+      mixed: boolean
+    }
+    customization?: {
+      customPrompt: boolean
+      customPromptText: string
+      prohibitedWords: boolean
+      prohibitedWordsList: string
+      transparentBackground: boolean
+      silhouette: boolean
+    }
+    titleCustomization?: {
+      titleStyle: string
+      customPrefix: boolean
+      prefixText: string
+      customPostfix: boolean
+      postfixText: string
+    }
   }
 }
 
@@ -110,12 +130,18 @@ const initialState: SettingsState = {
       const savedKeywordsCount = localStorage.getItem('generationKeywordsCount')
       const savedDescriptionWords = localStorage.getItem('generationDescriptionWords')
       const savedPlatforms = localStorage.getItem('generationPlatforms')
+      const savedKeywordSettings = localStorage.getItem('generationKeywordSettings')
+      const savedCustomization = localStorage.getItem('generationCustomization')
+      const savedTitleCustomization = localStorage.getItem('generationTitleCustomization')
 
       console.log('🔧 Loading generation settings from localStorage:', {
         savedTitleWords,
         savedKeywordsCount,
         savedDescriptionWords,
-        savedPlatforms
+        savedPlatforms,
+        savedKeywordSettings,
+        savedCustomization,
+        savedTitleCustomization
       })
 
       let platforms: string[] = []
@@ -128,11 +154,84 @@ const initialState: SettingsState = {
         }
       }
 
+      let keywordSettings = {
+        singleWord: true,
+        doubleWord: false,
+        mixed: false
+      }
+      if (savedKeywordSettings) {
+        try {
+          const parsed = JSON.parse(savedKeywordSettings)
+          if (parsed && typeof parsed === 'object') {
+            keywordSettings = {
+              singleWord: parsed.singleWord ?? true,
+              doubleWord: parsed.doubleWord ?? false,
+              mixed: parsed.mixed ?? false
+            }
+          }
+        } catch {
+          // Use defaults
+        }
+      }
+
+      let customization = {
+        customPrompt: false,
+        customPromptText: '',
+        prohibitedWords: false,
+        prohibitedWordsList: '',
+        transparentBackground: false,
+        silhouette: false
+      }
+      if (savedCustomization) {
+        try {
+          const parsed = JSON.parse(savedCustomization)
+          if (parsed && typeof parsed === 'object') {
+            customization = {
+              customPrompt: parsed.customPrompt ?? false,
+              customPromptText: parsed.customPromptText ?? '',
+              prohibitedWords: parsed.prohibitedWords ?? false,
+              prohibitedWordsList: parsed.prohibitedWordsList ?? '',
+              transparentBackground: parsed.transparentBackground ?? false,
+              silhouette: parsed.silhouette ?? false
+            }
+          }
+        } catch {
+          // Use defaults
+        }
+      }
+
+      let titleCustomization = {
+        titleStyle: 'seo-optimized',
+        customPrefix: false,
+        prefixText: '',
+        customPostfix: false,
+        postfixText: ''
+      }
+      if (savedTitleCustomization) {
+        try {
+          const parsed = JSON.parse(savedTitleCustomization)
+          if (parsed && typeof parsed === 'object') {
+            titleCustomization = {
+              titleStyle: parsed.titleStyle ?? 'seo-optimized',
+              customPrefix: parsed.customPrefix ?? false,
+              prefixText: parsed.prefixText ?? '',
+              customPostfix: parsed.customPostfix ?? false,
+              postfixText: parsed.postfixText ?? ''
+            }
+          }
+        } catch {
+          // Use defaults
+        }
+      }
+
       return {
         titleWords: savedTitleWords ? Math.max(5, Math.min(20, parseInt(savedTitleWords))) : 15,
         keywordsCount: savedKeywordsCount ? Math.max(10, Math.min(50, parseInt(savedKeywordsCount))) : 45,
         descriptionWords: savedDescriptionWords ? Math.max(5, Math.min(20, parseInt(savedDescriptionWords))) : 12,
-        platforms: platforms.length > 0 ? platforms : ['freepik'] // Default to Freepik
+        platforms: platforms.length > 0 ? platforms : ['freepik'], // Default to Freepik
+        keywordSettings,
+        customization,
+        titleCustomization
       }
     } catch (error) {
       console.error('❌ Error loading generation settings from localStorage:', error)
@@ -140,7 +239,27 @@ const initialState: SettingsState = {
         titleWords: 15,
         keywordsCount: 45,
         descriptionWords: 12,
-        platforms: ['freepik']
+        platforms: ['freepik'],
+        keywordSettings: {
+          singleWord: true,
+          doubleWord: false,
+          mixed: false
+        },
+        customization: {
+          customPrompt: false,
+          customPromptText: '',
+          prohibitedWords: false,
+          prohibitedWordsList: '',
+          transparentBackground: false,
+          silhouette: false
+        },
+        titleCustomization: {
+          titleStyle: 'seo-optimized',
+          customPrefix: false,
+          prefixText: '',
+          customPostfix: false,
+          postfixText: ''
+        }
       }
     }
   })()
@@ -436,17 +555,45 @@ const settingsSlice = createSlice({
     },
 
         // Generation settings actions
-    updateGenerationSettings: (state, action: PayloadAction<{ titleWords: number; keywordsCount: number; descriptionWords: number; platforms?: string[] }>) => {
+    updateGenerationSettings: (state, action: PayloadAction<{
+      titleWords: number
+      keywordsCount: number
+      descriptionWords: number
+      platforms?: string[]
+      keywordSettings?: {
+        singleWord: boolean
+        doubleWord: boolean
+        mixed: boolean
+      }
+      customization?: {
+        customPrompt: boolean
+        customPromptText: string
+        prohibitedWords: boolean
+        prohibitedWordsList: string
+        transparentBackground: boolean
+        silhouette: boolean
+      }
+      titleCustomization?: {
+        titleStyle: string
+        customPrefix: boolean
+        prefixText: string
+        customPostfix: boolean
+        postfixText: string
+      }
+    }>) => {
       // Validate and clamp values to allowed ranges
       const titleWords = Math.max(5, Math.min(20, action.payload.titleWords))
       const keywordsCount = Math.max(10, Math.min(50, action.payload.keywordsCount))
       const descriptionWords = Math.max(5, Math.min(20, action.payload.descriptionWords))
       const platforms = action.payload.platforms || state.generationSettings.platforms
+      const keywordSettings = action.payload.keywordSettings || state.generationSettings.keywordSettings
+      const customization = action.payload.customization || state.generationSettings.customization
+      const titleCustomization = action.payload.titleCustomization || state.generationSettings.titleCustomization
 
-      console.log('💾 Saving generation settings:', { titleWords, keywordsCount, descriptionWords, platforms })
+      console.log('💾 Saving generation settings:', { titleWords, keywordsCount, descriptionWords, platforms, keywordSettings, customization, titleCustomization })
 
       // Update Redux state
-      state.generationSettings = { titleWords, keywordsCount, descriptionWords, platforms }
+      state.generationSettings = { titleWords, keywordsCount, descriptionWords, platforms, keywordSettings, customization, titleCustomization }
 
       // Save to localStorage for persistence
       try {
@@ -454,6 +601,15 @@ const settingsSlice = createSlice({
         localStorage.setItem('generationKeywordsCount', keywordsCount.toString())
         localStorage.setItem('generationDescriptionWords', descriptionWords.toString())
         localStorage.setItem('generationPlatforms', JSON.stringify(platforms))
+        if (keywordSettings) {
+          localStorage.setItem('generationKeywordSettings', JSON.stringify(keywordSettings))
+        }
+        if (customization) {
+          localStorage.setItem('generationCustomization', JSON.stringify(customization))
+        }
+        if (titleCustomization) {
+          localStorage.setItem('generationTitleCustomization', JSON.stringify(titleCustomization))
+        }
         console.log('✅ Generation settings saved to localStorage successfully')
       } catch (error) {
         console.error('❌ Error saving generation settings to localStorage:', error)

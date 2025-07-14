@@ -9,6 +9,9 @@ import YouTubeIcon from '../assets/icons/youtube-stroke-rounded.svg'
 import DocumentIcon from '../assets/icons/google-doc-stroke-rounded.svg'
 import PromptIcon from '../assets/icons/ai-content-generator-01-stroke-rounded.svg'
 import FileIcon from '../assets/icons/file-02-stroke-rounded.svg'
+import ChatIcon from '../assets/icons/comment-02-stroke-rounded.svg'
+import HelpIcon from '../assets/icons/help-square-stroke-rounded.svg'
+import SaturnIcon from '../assets/icons/saturn-01-stroke-rounded.svg'
 
 const SIDEBAR_WIDTH = 80
 
@@ -18,7 +21,6 @@ const Sidebar = (): React.JSX.Element => {
   const [showNavigationPopup, setShowNavigationPopup] = useState(false)
 
   const navigationTools = [
-    { name: 'AI Image Generator', icon: ImageIcon, route: 'image-generator' },
     { name: 'Background Remover', icon: ImageIcon, route: 'background-remover' },
     { name: 'YouTube Transcriber', icon: YouTubeIcon, route: 'youtube-transcriber' },
     { name: 'File Converter', icon: DocumentIcon, route: 'file-converter' },
@@ -30,7 +32,7 @@ const Sidebar = (): React.JSX.Element => {
 
   return (
     <div
-      className="fixed left-0 top-8 h-[calc(100vh-2rem)] w-20 bg-[#f6f6f8] dark:bg-[#2a2d3a] z-40 flex flex-col justify-between"
+      className="fixed left-0 top-0 h-screen w-20 bg-[#f6f6f8] dark:bg-[#141517] z-40 flex flex-col justify-between"
       style={{ minWidth: SIDEBAR_WIDTH }}
     >
       <nav className="flex-1 flex flex-col items-center pt-4">
@@ -43,7 +45,7 @@ const Sidebar = (): React.JSX.Element => {
         </div>
         <Link
           to="/generator"
-          className={`flex flex-col items-center w-16 h-16 justify-center rounded transition-all duration-200 ${
+          className={`flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
             isActive('/generator')
               ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
               : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
@@ -66,36 +68,60 @@ const Sidebar = (): React.JSX.Element => {
         </Link>
 
         <Link
-          to="/settings"
-          className={`flex flex-col items-center  w-16 h-16 justify-center rounded transition-all duration-200 ${
-            isActive('/settings')
+          to="/chat"
+          className={`flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
+            isActive('/chat')
               ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
               : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
           }`}
         >
           <img
-            src={SettingsIcon}
-            alt="Settings"
+            src={ChatIcon}
+            alt="AI Chat"
             className={`w-6 h-6 transition-all duration-200 ${
-              isActive('/settings')
+              isActive('/chat')
                 ? 'opacity-100'
                 : 'opacity-60 group-hover:opacity-100'
             } ${
-              isActive('/settings')
+              isActive('/chat')
                 ? 'dark:filter dark:invert'
                 : 'dark:filter dark:invert dark:opacity-70'
             }`}
           />
-          <span className="text-xs mt-1">Settings</span>
+          <span className="text-xs mt-1">Chat</span>
         </Link>
 
-                {/* Navigation with popup */}
+        <Link
+          to="/image-generator"
+          className={`flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
+            isActive('/image-generator')
+              ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
+              : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
+          }`}
+        >
+          <img
+            src={ImageIcon}
+            alt="AI Image Generator"
+            className={`w-6 h-6 transition-all duration-200 ${
+              isActive('/image-generator')
+                ? 'opacity-100'
+                : 'opacity-60 group-hover:opacity-100'
+            } ${
+              isActive('/image-generator')
+                ? 'dark:filter dark:invert'
+                : 'dark:filter dark:invert dark:opacity-70'
+            }`}
+          />
+          <span className="text-xs mt-1">Images</span>
+        </Link>
+
+        {/* Navigation with popup - Tools (moved above Settings/Help) */}
         <div
           className="relative"
           onMouseEnter={() => setShowNavigationPopup(true)}
           onMouseLeave={() => setShowNavigationPopup(false)}
         >
-          <div className="flex flex-col items-center w-16 h-16 justify-center rounded transition-all duration-200 text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white cursor-pointer">
+          <div className="flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white cursor-pointer">
             <img
               src={NavigationIcon}
               alt="Navigation"
@@ -124,14 +150,10 @@ const Sidebar = (): React.JSX.Element => {
                         window.location.hash = `#${tool.route}`
                         setShowNavigationPopup(false)
                       }}
-                      className="flex items-center gap-2 p-2.5 text-left rounded-lg hover:bg-blue-50 dark:hover:bg-[#383b4a] transition-all duration-200 text-sm text-gray-700 dark:text-gray-300 hover:text-blue-700 dark:hover:text-blue-300 group"
+                      className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-[#383b4a] transition-colors text-left"
                     >
-                      <img
-                        src={tool.icon}
-                        alt={tool.name}
-                        className="w-4 h-4 group-hover:scale-110 transition-transform duration-200 flex-shrink-0 opacity-70 group-hover:opacity-100 dark:filter dark:invert"
-                      />
-                      <span className="font-medium truncate">{tool.name}</span>
+                      <img src={tool.icon} alt={tool.name} className="w-6 h-6" />
+                      <span className="font-medium text-gray-900 dark:text-white">{tool.name}</span>
                     </button>
                   ))}
                 </div>
@@ -139,10 +161,73 @@ const Sidebar = (): React.JSX.Element => {
             </div>
           )}
         </div>
+
+        {/* Settings and Help moved below Tools */}
+        <Link
+          to="/settings"
+          className={`flex flex-col items-center  w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
+            isActive('/settings')
+              ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
+              : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
+          }`}
+        >
+          <img
+            src={SettingsIcon}
+            alt="Settings"
+            className={`w-6 h-6 transition-all duration-200 ${
+              isActive('/settings')
+                ? 'opacity-100'
+                : 'opacity-60 group-hover:opacity-100'
+            } ${
+              isActive('/settings')
+                ? 'dark:filter dark:invert'
+                : 'dark:filter dark:invert dark:opacity-70'
+            }`}
+          />
+          <span className="text-xs mt-1">Settings</span>
+        </Link>
+
+        <Link
+          to="/help"
+          className={`flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
+            isActive('/help')
+              ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
+              : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
+          }`}
+        >
+          <img
+            src={HelpIcon}
+            alt="Help"
+            className={`w-6 h-6 transition-all duration-200 ${
+              isActive('/help')
+                ? 'opacity-100'
+                : 'opacity-60 group-hover:opacity-100'
+            } ${
+              isActive('/help')
+                ? 'dark:filter dark:invert'
+                : 'dark:filter dark:invert dark:opacity-70'
+            }`}
+          />
+          <span className="text-xs mt-1">Help</span>
+        </Link>
       </nav>
 
-      {/* WhatsApp Channel at bottom */}
-      <div className="pb-4 flex justify-center">
+      {/* Bottom buttons */}
+      <div className="pb-4 flex flex-col items-center gap-2">
+        {/* Website link */}
+        <button
+          onClick={() => window.open('https://csvgen.com', '_blank')}
+          className="flex items-center justify-center w-12 h-12 rounded transition-all duration-200 text-gray-400 hover:bg-white/60 hover:text-blue-600 dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-blue-400 group"
+          title="Visit CSVGen.com"
+        >
+          <img
+            src={SaturnIcon}
+            alt="CSVGen Website"
+            className="w-6 h-6 transition-all duration-200 opacity-60 group-hover:opacity-100 dark:filter dark:invert"
+          />
+        </button>
+
+        {/* WhatsApp Channel */}
         <button
           onClick={() => window.open('https://whatsapp.com/channel/0029Vb6O7jG4NVipRzkr1w0A', '_blank')}
           className="flex items-center justify-center w-12 h-12 rounded transition-all duration-200 text-gray-400 hover:bg-white/60 hover:text-green-600 dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-green-400 group"

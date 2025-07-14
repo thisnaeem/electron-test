@@ -23,7 +23,7 @@ const platformConfigs: Record<string, PlatformCSVConfig> = {
     ]
   },
   'adobe-stock': {
-    headers: ['Filename', 'Title', 'Keywords', 'Description', 'Category'],
+    headers: ['Filename', 'Title', 'Keywords'],
     formatRow: (data) => [
       data.filename,
       data.title,

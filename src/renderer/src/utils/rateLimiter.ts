@@ -7,6 +7,7 @@ const MINUTE_IN_MS = 60 * 1000
 
 export class RateLimiter {
   private rateLimitInfo: { [apiKeyId: string]: RateLimitInfo } = {}
+  private roundRobinIndex: number = 0 // For round-robin distribution
 
   constructor() {
     // Clean up old rate limit data on initialization
@@ -56,20 +57,35 @@ export class RateLimiter {
     this.rateLimitInfo[apiKeyId] = info
   }
 
-  /**
+      /**
    * Get the next available API key that can make a request
+   * Uses strict round-robin distribution: 1->2->3->...->N->1->2->3...
    */
   getNextAvailableApiKey(apiKeys: ApiKeyInfo[]): ApiKeyInfo | null {
     const validApiKeys = apiKeys.filter(key => key.isValid)
+    if (validApiKeys.length === 0) return null
 
-    // First, try to find a key that's not rate limited
-    for (const apiKey of validApiKeys) {
-      if (this.canMakeRequest(apiKey.id)) {
-        return apiKey
+    // Get all available keys (not rate limited)
+    const availableKeys = validApiKeys.filter(key => this.canMakeRequest(key.id))
+
+    if (availableKeys.length > 0) {
+      // Strict round-robin: always use the next key in sequence
+      // Reset index if it's out of bounds for available keys
+      if (this.roundRobinIndex >= availableKeys.length) {
+        this.roundRobinIndex = 0
       }
+
+      const selectedKey = availableKeys[this.roundRobinIndex]
+
+      // Move to next key for the next request
+      this.roundRobinIndex = (this.roundRobinIndex + 1) % availableKeys.length
+
+      const nextKey = availableKeys[this.roundRobinIndex] || availableKeys[0]
+      console.log(`🔄 Round-robin: Selected ${selectedKey.name} (#${this.roundRobinIndex}/${availableKeys.length}) → Next will be: ${nextKey?.name}`)
+      return selectedKey
     }
 
-    // If all keys are rate limited, find the one that will be available soonest
+    // If no keys are available, find the one that will be available soonest
     let soonestKey: ApiKeyInfo | null = null
     let soonestTime = Infinity
 
@@ -81,7 +97,30 @@ export class RateLimiter {
       }
     }
 
+    console.log(`⏳ All keys rate limited, returning soonest available: ${soonestKey?.name}`)
     return soonestKey
+  }
+
+  /**
+   * Get a balanced distribution of API keys for batch processing
+   */
+  getBalancedApiKeys(apiKeys: ApiKeyInfo[], batchSize: number): ApiKeyInfo[] {
+    const validApiKeys = apiKeys.filter(key => key.isValid)
+    if (validApiKeys.length === 0) return []
+
+    const availableKeys = validApiKeys.filter(key => this.canMakeRequest(key.id))
+    const result: ApiKeyInfo[] = []
+
+    // Distribute batch among available keys
+    for (let i = 0; i < batchSize; i++) {
+      if (availableKeys.length > 0) {
+        const keyIndex = i % availableKeys.length
+        result.push(availableKeys[keyIndex])
+      }
+    }
+
+    console.log(`📊 Distributed ${batchSize} requests across ${availableKeys.length} available API keys`)
+    return result
   }
 
   /**
@@ -134,6 +173,14 @@ export class RateLimiter {
    */
   resetApiKeyLimits(apiKeyId: string): void {
     delete this.rateLimitInfo[apiKeyId]
+  }
+
+  /**
+   * Reset round-robin index to ensure fresh distribution when API keys change
+   */
+  resetRoundRobin(): void {
+    this.roundRobinIndex = 0
+    console.log('🔄 Reset round-robin index for fresh API key distribution')
   }
 
   /**

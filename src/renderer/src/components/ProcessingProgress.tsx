@@ -1,15 +1,44 @@
 import { ProcessingProgress as ProcessingProgressType } from '../context/GeminiContext.types'
 import { useAppSelector } from '../store/hooks'
+import { useState, useEffect } from 'react'
 
 interface ProcessingProgressProps {
   progress: ProcessingProgressType
+  generationStartTime?: number | null
   className?: string
 }
 
-const ProcessingProgress: React.FC<ProcessingProgressProps> = ({ progress, className = '' }) => {
+const ProcessingProgress: React.FC<ProcessingProgressProps> = ({ progress, generationStartTime, className = '' }) => {
   const { apiKeys } = useAppSelector(state => state.settings)
+  const [elapsedTime, setElapsedTime] = useState<string>('0s')
 
   const progressPercentage = progress.total > 0 ? Math.round((progress.completed / progress.total) * 100) : 0
+
+  // Update timer every second
+  useEffect(() => {
+    if (!generationStartTime) {
+      setElapsedTime('0s')
+      return
+    }
+
+    const updateTimer = () => {
+      const elapsed = Date.now() - generationStartTime
+      const seconds = Math.floor(elapsed / 1000)
+
+      if (seconds < 60) {
+        setElapsedTime(`${seconds}s`)
+      } else {
+        const minutes = Math.floor(seconds / 60)
+        const remainingSeconds = seconds % 60
+        setElapsedTime(`${minutes}m ${remainingSeconds}s`)
+      }
+    }
+
+    updateTimer() // Initial update
+    const interval = setInterval(updateTimer, 1000)
+
+    return () => clearInterval(interval)
+  }, [generationStartTime])
 
   // Get API key info for current processing
   const currentApiKey = progress.currentApiKeyId
@@ -19,7 +48,14 @@ const ProcessingProgress: React.FC<ProcessingProgressProps> = ({ progress, class
   return (
     <div className={`bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="font-medium text-gray-900 dark:text-gray-100">Processing Images</h3>
+        <div className="flex items-center gap-3">
+          <h3 className="font-medium text-gray-900 dark:text-gray-100">Processing Images</h3>
+          {generationStartTime && (
+            <span className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-full font-mono">
+              {elapsedTime}
+            </span>
+          )}
+        </div>
         <span className="text-sm text-gray-600 dark:text-gray-400">
           {progress.completed} / {progress.total} completed ({progressPercentage}%)
         </span>

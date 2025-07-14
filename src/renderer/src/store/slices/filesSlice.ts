@@ -8,6 +8,8 @@ export interface FileData {
   lastModified: number
   previewPath?: string
   previewData?: string
+  fileType?: 'image' | 'video' | 'vector'
+  originalData?: string // For vector files (SVG/EPS content)
 }
 
 export interface MetadataResult {

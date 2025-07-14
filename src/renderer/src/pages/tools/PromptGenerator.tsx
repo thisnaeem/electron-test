@@ -123,7 +123,7 @@ const PromptGenerator: React.FC = () => {
 
   return (
     <div
-      className="absolute top-10 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]"
+      className="absolute top-0 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#1a1b23]"
       style={{ padding: '2rem 0' }}
     >
       <div className="px-8">
