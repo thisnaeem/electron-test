@@ -7,6 +7,7 @@ import ImageUploader from '../components/ImageUploader'
 import UploadedImagesDisplay from '../components/UploadedImagesDisplay'
 import UploadProcessingModal from '../components/UploadProcessingModal'
 import { downloadMultiPlatformCSVs, ImageData } from '../utils/csvGenerator'
+// Remove: import TitleBar from '../components/TitleBar'
 
 const Generator = (): React.JSX.Element => {
   const { generateMetadata, stopGeneration, isLoading, error, processingProgress, generationStartTime } = useGemini()
@@ -207,8 +208,8 @@ const Generator = (): React.JSX.Element => {
 
 
   return (
-    <div className="absolute top-0 left-20 right-0 bottom-0 min-h-screen flex items-center justify-center overflow-auto bg-white dark:bg-[#101113]">
-      <div className="min-h-full w-full p-4 relative space-y-4">
+    <div className="absolute top-0 left-20 right-0 bottom-0 min-h-screen flex flex-col bg-white dark:bg-[#101113]">
+      <div className="flex-1 min-h-0 w-full p-4 relative space-y-4 overflow-y-auto">
         {/* Upload Processing Modal */}
         <UploadProcessingModal />
         {/* Image Uploader or API Keys Required Message */}
