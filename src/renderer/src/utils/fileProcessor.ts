@@ -818,19 +818,19 @@ export const validateFile = (file: File): { isValid: boolean; error?: string } =
   }
 
   // Check file sizes
-  const maxImageSize = 20 * 1024 * 1024 // 20MB for images
-  const maxVideoSize = 50 * 1024 * 1024 // 50MB for videos
+  const maxImageSize = 50 * 1024 * 1024 // 50MB for images
+  const maxVideoSize = 100 * 1024 * 1024 // 100MB for videos
   const maxVectorSize = 10 * 1024 * 1024 // 10MB for vectors
 
   if (isVideo && file.size > maxVideoSize) {
     return {
       isValid: false,
-      error: `${file.name} is too large. Please use videos smaller than 50MB.`
+      error: `${file.name} is too large. Please use videos smaller than 100MB.`
     }
   }
 
   if ((isImage || isSvg || isEps) && file.size > (isSvg || isEps ? maxVectorSize : maxImageSize)) {
-    const limit = isSvg || isEps ? '10MB' : '20MB'
+    const limit = isSvg || isEps ? '10MB' : '50MB'
     return {
       isValid: false,
       error: `${file.name} is too large. Please use files smaller than ${limit}.`

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import ApiKeyManager from '../components/ApiKeyManager'
 import DarkModeToggle from '../components/DarkModeToggle'
+import LicenseStatus from '../components/LicenseStatus'
 import { useAppSelector, useAppDispatch } from '../store/hooks'
 import { setTogetherApiKey, validateTogetherApiKey } from '../store/slices/settingsSlice'
 
@@ -108,6 +109,15 @@ const Settings = (): React.JSX.Element => {
 
   const renderApiContent = () => (
     <div className="space-y-8">
+      {/* License Status Section */}
+      <div>
+        <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">License Status</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
+          Manage your application license and view subscription details.
+        </p>
+        <LicenseStatus />
+      </div>
+
       {/* API Key Management Section */}
       <div>
         <ApiKeyManager />

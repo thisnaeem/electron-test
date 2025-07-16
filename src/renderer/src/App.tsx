@@ -84,15 +84,15 @@ function AppContent(): React.JSX.Element {
             <Routes>
               <Route path="/" element={<Navigate to="/generator" replace />} />
           <Route path="/generator" element={
-            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
-              <div className="py-8"><Generator /></div>
-            </div>
+              <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+                <div className="py-8"><Generator /></div>
+              </div>
           } />
               <Route path="/chat" element={<ChatInterface />} />
           <Route path="/image-generator" element={
-            <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
-              <div className="py-8"><ImageGenerator /></div>
-            </div>
+              <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
+                <div className="py-8"><ImageGenerator /></div>
+              </div>
           } />
           <Route path="/background-remover" element={
             <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
@@ -149,6 +149,8 @@ function AppContent(): React.JSX.Element {
 function App(): React.JSX.Element {
   const dispatch = useAppDispatch()
   const { isDarkMode, analyticsEnabled } = useAppSelector(state => state.settings)
+
+
 
   // Initialize analytics
   useEffect(() => {

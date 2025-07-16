@@ -31,6 +31,31 @@ interface DownloadImageResponse {
   error?: string
 }
 
+// KeyAuth API response types
+interface KeyAuthResponse {
+  success: boolean
+  message: string
+  info?: {
+    username: string
+    subscription: string
+    subscriptionExpiry: string
+    ip: string
+    hwid: string
+    createDate: string
+    lastLogin: string
+  }
+}
+
+interface LicenseInfo {
+  username: string
+  subscription: string
+  subscriptionExpiry: string
+  ip: string
+  hwid: string
+  createDate: string
+  lastLogin: string
+}
+
 
 
 declare global {
@@ -55,7 +80,21 @@ declare global {
       clearAllPreviews: () => Promise<SaveImagePreviewResponse>
       downloadImageFromUrl: (imageUrl: string, filename: string) => Promise<DownloadImageResponse>
 
+      // KeyAuth APIs
+      keyauth: {
+        initialize: () => Promise<boolean>
+        login: (username: string, password: string) => Promise<KeyAuthResponse>
+        register: (username: string, password: string, license: string) => Promise<KeyAuthResponse>
+        license: (licenseKey: string) => Promise<KeyAuthResponse>
+        getCurrentUser: () => Promise<LicenseInfo | null>
+        isAuthenticated: () => Promise<boolean>
+        isSubscriptionValid: () => Promise<boolean>
+        getDaysRemaining: () => Promise<number>
+        logout: () => Promise<boolean>
+      }
 
+      // Auth success notification
+      authSuccess: (userInfo: LicenseInfo) => void
 
       // Window control
       onWindowMaximized: (callback: () => void) => () => void

@@ -35,6 +35,22 @@ const api = {
 
 
 
+  // KeyAuth APIs
+  keyauth: {
+    initialize: () => ipcRenderer.invoke('keyauth-initialize'),
+    login: (username: string, password: string) => ipcRenderer.invoke('keyauth-login', username, password),
+    register: (username: string, password: string, license: string) => ipcRenderer.invoke('keyauth-register', username, password, license),
+    license: (licenseKey: string) => ipcRenderer.invoke('keyauth-license', licenseKey),
+    getCurrentUser: () => ipcRenderer.invoke('keyauth-get-current-user'),
+    isAuthenticated: () => ipcRenderer.invoke('keyauth-is-authenticated'),
+    isSubscriptionValid: () => ipcRenderer.invoke('keyauth-is-subscription-valid'),
+    getDaysRemaining: () => ipcRenderer.invoke('keyauth-get-days-remaining'),
+    logout: () => ipcRenderer.invoke('keyauth-logout')
+  },
+
+  // Auth success notification
+  authSuccess: (userInfo: any) => ipcRenderer.send('auth-success', userInfo),
+
   // Window control
   onWindowMaximized: (callback: () => void) => {
     const listener = () => callback()

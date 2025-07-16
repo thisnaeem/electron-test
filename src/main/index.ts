@@ -6,6 +6,7 @@ import electronUpdater, { type AppUpdater } from 'electron-updater'
 import electronLog from 'electron-log'
 import fs from 'fs'
 import path from 'path'
+import keyAuthMainService from './keyauth'
 
 
 export function getAutoUpdater(): AppUpdater {
@@ -23,6 +24,12 @@ const previewsDir = path.join(appDataPath, 'previews')
 if (!fs.existsSync(previewsDir)) {
   fs.mkdirSync(previewsDir, { recursive: true })
 }
+
+// License window variable
+let licenseWindow: BrowserWindow | null = null
+let isAuthenticated = false
+
+
 
 // Enable logging for debugging
 if (is.dev) {
@@ -107,8 +114,48 @@ autoUpdater.on('update-downloaded', (info) => {
 
 
 
-function createWindow(): void {
-  // Create the browser window.
+function createLicenseWindow(): void {
+  // Create the license window
+  licenseWindow = new BrowserWindow({
+    width: 500,
+    height: 650,
+    resizable: false,
+    show: false,
+    autoHideMenuBar: true,
+    frame: true,
+    center: true,
+    icon: join(__dirname, '../../resources/app-logo.png'),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false,
+      webSecurity: true
+    }
+  })
+
+  licenseWindow.on('ready-to-show', () => {
+    licenseWindow?.show()
+  })
+
+  // Handle window close - quit app
+  licenseWindow.on('close', () => {
+    app.quit()
+  })
+
+  licenseWindow.webContents.setWindowOpenHandler((details) => {
+    shell.openExternal(details.url)
+    return { action: 'deny' }
+  })
+
+  // Load the license screen
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    licenseWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/license.html')
+  } else {
+    licenseWindow.loadFile(join(__dirname, '../renderer/license.html'))
+  }
+}
+
+function createMainWindow(): void {
+  // Create the main browser window
   mainWindow = new BrowserWindow({
     width: 1100,
     height: 700,
@@ -146,6 +193,14 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  // Emit maximize/unmaximize events for renderer state sync
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window-maximized')
+  })
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window-unmaximized')
+  })
 }
 
 // This method will be called when Electron has finished
@@ -449,15 +504,100 @@ app.whenReady().then(async () => {
     app.quit()
   })
 
-  // Emit maximize/unmaximize events for renderer state sync
-  mainWindow?.on('maximize', () => {
-    mainWindow?.webContents.send('window-maximized')
-  })
-  mainWindow?.on('unmaximize', () => {
-    mainWindow?.webContents.send('window-unmaximized')
+  // KeyAuth IPC handlers
+  ipcMain.handle('keyauth-initialize', async () => {
+    try {
+      return await keyAuthMainService.initialize()
+    } catch (error) {
+      console.error('KeyAuth initialization error:', error)
+      return false
+    }
   })
 
-  createWindow()
+  ipcMain.handle('keyauth-login', async (_, username: string, password: string) => {
+    try {
+      return await keyAuthMainService.login(username, password)
+    } catch (error) {
+      console.error('KeyAuth login error:', error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Login failed'
+      }
+    }
+  })
+
+  ipcMain.handle('keyauth-register', async (_, username: string, password: string, license: string) => {
+    try {
+      return await keyAuthMainService.register(username, password, license)
+    } catch (error) {
+      console.error('KeyAuth register error:', error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'Registration failed'
+      }
+    }
+  })
+
+  ipcMain.handle('keyauth-license', async (_, licenseKey: string) => {
+    try {
+      return await keyAuthMainService.license(licenseKey)
+    } catch (error) {
+      console.error('KeyAuth license error:', error)
+      return {
+        success: false,
+        message: error instanceof Error ? error.message : 'License activation failed'
+      }
+    }
+  })
+
+  ipcMain.handle('keyauth-get-current-user', () => {
+    return keyAuthMainService.getCurrentUser()
+  })
+
+  ipcMain.handle('keyauth-is-authenticated', () => {
+    return keyAuthMainService.isAuthenticated()
+  })
+
+  ipcMain.handle('keyauth-is-subscription-valid', () => {
+    return keyAuthMainService.isSubscriptionValid()
+  })
+
+  ipcMain.handle('keyauth-get-days-remaining', () => {
+    return keyAuthMainService.getDaysRemaining()
+  })
+
+  ipcMain.handle('keyauth-logout', () => {
+    keyAuthMainService.logout()
+    return true
+  })
+
+  // Handle successful authentication from license window
+  ipcMain.on('auth-success', (_, userInfo) => {
+    console.log('Authentication successful:', userInfo)
+    isAuthenticated = true
+    
+    // Close license window
+    if (licenseWindow) {
+      licenseWindow.close()
+      licenseWindow = null
+    }
+    
+    // Create and show main window
+    createMainWindow()
+  })
+
+
+
+  // Initialize KeyAuth and show license window
+  try {
+    await keyAuthMainService.initialize()
+    console.log('KeyAuth initialized, showing license window')
+    createLicenseWindow()
+  } catch (error) {
+    console.error('Failed to initialize KeyAuth:', error)
+    // Still show license window to allow user to try authentication
+    createLicenseWindow()
+  }
 
 
 
@@ -469,7 +609,13 @@ app.whenReady().then(async () => {
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      if (isAuthenticated) {
+        createMainWindow()
+      } else {
+        createLicenseWindow()
+      }
+    }
   })
 })
 

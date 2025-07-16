@@ -79,7 +79,7 @@ const ExportDropdown: React.FC<ExportDropdownProps> = ({ onExportCSV, disabled =
       <button
         onClick={() => handleSinglePlatformExport(selectedPlatforms[0])}
         disabled={disabled}
-        className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 hover:shadow-md hover:scale-105 text-gray-800 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-[#141517] dark:text-white dark:hover:bg-gray-600"
       >
         Export
       </button>
@@ -93,7 +93,7 @@ const ExportDropdown: React.FC<ExportDropdownProps> = ({ onExportCSV, disabled =
         <button
           onClick={() => setIsOpen(!isOpen)}
           disabled={disabled}
-          className="px-4 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          className="px-4 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 hover:shadow-md text-gray-800 font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center dark:bg-[#141517] dark:text-white dark:hover:bg-gray-600"
         >
           Export
         </button>

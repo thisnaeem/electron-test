@@ -15,6 +15,21 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src')
       }
     },
-    plugins: [react()]
+    plugins: [react()],
+    define: {
+      global: 'globalThis'
+    },
+    optimizeDeps: {
+      exclude: ['keyauth']
+    },
+    build: {
+      rollupOptions: {
+        external: ['crypto', 'child_process', 'fs', 'path', 'os'],
+        input: {
+          main: resolve('src/renderer/index.html'),
+          license: resolve('src/renderer/license.html')
+        }
+      }
+    }
   }
 })

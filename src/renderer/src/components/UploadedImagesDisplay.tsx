@@ -75,6 +75,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
   const [processingCount, setProcessingCount] = useState(0)
   const [showSettingsModal, setShowSettingsModal] = useState(false)
   const [elapsedTime, setElapsedTime] = useState<string>('0s')
+  const [showScrollToTop, setShowScrollToTop] = useState(false)
 
   // Update timer every second when generation is running
   useEffect(() => {
@@ -101,6 +102,63 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
     return () => clearInterval(interval)
   }, [generationStartTime, isProcessing])
+
+  // Scroll to top functionality
+  useEffect(() => {
+    const handleScroll = (): void => {
+      // Find the scrollable container (the generator page container)
+      const scrollContainer = document.querySelector('.overflow-y-auto')
+      if (scrollContainer) {
+        const scrollTop = scrollContainer.scrollTop
+        // Show button when scrolled down more than 200px and have more than 10 images
+        setShowScrollToTop(scrollTop > 200 && files.length > 10)
+      }
+    }
+
+    // Add scroll listener to the correct container
+    const scrollContainer = document.querySelector('.overflow-y-auto')
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll)
+      return () => scrollContainer.removeEventListener('scroll', handleScroll)
+    }
+    
+    // Return empty cleanup function if no scroll container found
+    return () => {}
+  }, [files.length])
+
+
+
+  const scrollToTop = useCallback((): void => {
+    // Try multiple selectors to find the scrollable container
+    const selectors = [
+      '.overflow-y-auto',
+      '[class*="overflow-y-auto"]',
+      '.flex-1.min-h-0',
+      'div[class*="overflow"]'
+    ]
+    
+    let scrollContainer: Element | null = null
+    
+    for (const selector of selectors) {
+      scrollContainer = document.querySelector(selector)
+      if (scrollContainer && scrollContainer.scrollTop !== undefined) {
+        break
+      }
+    }
+    
+    if (scrollContainer) {
+      scrollContainer.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      })
+    } else {
+      // Fallback to window scroll
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      })
+    }
+  }, [])
 
   const handleGenerateMetadata = useCallback((): void => {
     if (files.length > 0) {
@@ -557,7 +615,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
 
   return (
-    <div className="w-full">
+    <div className="w-full relative">
       {/* Header with action buttons */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
@@ -578,7 +636,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
           <button
             onClick={handleAddMoreImages}
             disabled={isProcessing || isLoading || isProcessingFiles || files.length >= 1000}
-            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 hover:shadow-md hover:scale-105 text-gray-800 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-[#141517] dark:text-white dark:hover:bg-gray-600"
           >
             Add
           </button>
@@ -586,7 +644,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
           <button
             onClick={handleClearImages}
             disabled={isProcessing || isLoading || files.length === 0 || isProcessingFiles}
-            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 hover:shadow-md hover:scale-105 text-gray-800 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-[#141517] dark:text-white dark:hover:bg-gray-600"
           >
             Clear
           </button>
@@ -606,7 +664,7 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
           <button
             onClick={handleGenerateMetadata}
               disabled={isLoading || files.length === 0 || isProcessingFiles}
-            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 hover:shadow-md hover:scale-105 text-gray-800 rounded-lg font-medium transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 dark:bg-[#141517] dark:text-white dark:hover:bg-gray-600"
           >
               Generate
           </button>
@@ -1012,6 +1070,30 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
         onClose={() => setShowSettingsModal(false)}
         onConfirm={handleConfirmGeneration}
       />
+
+      {/* Scroll to Top Button */}
+      {showScrollToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-8 right-8 z-50 w-12 h-12 bg-blue-500 hover:bg-blue-600 text-white rounded-full shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-110 flex items-center justify-center group"
+          title="Go to top"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-6 w-6 transition-transform group-hover:-translate-y-0.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 10l7-7m0 0l7 7m-7-7v18"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   )
 })

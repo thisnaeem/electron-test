@@ -279,7 +279,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
             {isDragOver ? 'Drop files here' : 'Drop files here or click to upload'}
               </p>
               <p className="text-sm text-gray-500 dark:text-white">
-            Images, Videos - up to 1000 files
+            Images (50MB), Videos (100MB) - up to 1000 files
               </p>
             </div>
               </div>
