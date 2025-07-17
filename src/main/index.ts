@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Notification } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
@@ -504,6 +504,44 @@ app.whenReady().then(async () => {
     app.quit()
   })
 
+  // IPC handler for showing native notifications
+  ipcMain.handle('show-notification', (_, options: { title: string; body: string; icon?: string }) => {
+    try {
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title: options.title,
+          body: options.body,
+          icon: options.icon || join(__dirname, '../../resources/app-logo.png'),
+          silent: false
+        })
+
+        notification.show()
+        
+        // Optional: Handle notification click
+        notification.on('click', () => {
+          // Bring the main window to focus when notification is clicked
+          if (mainWindow) {
+            if (mainWindow.isMinimized()) {
+              mainWindow.restore()
+            }
+            mainWindow.focus()
+          }
+        })
+
+        return { success: true }
+      } else {
+        console.log('Notifications not supported on this system')
+        return { success: false, error: 'Notifications not supported' }
+      }
+    } catch (error) {
+      console.error('Error showing notification:', error)
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      }
+    }
+  })
+
   // KeyAuth IPC handlers
   ipcMain.handle('keyauth-initialize', async () => {
     try {
@@ -575,13 +613,13 @@ app.whenReady().then(async () => {
   ipcMain.on('auth-success', (_, userInfo) => {
     console.log('Authentication successful:', userInfo)
     isAuthenticated = true
-    
+
     // Close license window
     if (licenseWindow) {
       licenseWindow.close()
       licenseWindow = null
     }
-    
+
     // Create and show main window
     createMainWindow()
   })

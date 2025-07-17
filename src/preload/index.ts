@@ -51,6 +51,10 @@ const api = {
   // Auth success notification
   authSuccess: (userInfo: any) => ipcRenderer.send('auth-success', userInfo),
 
+  // Native notifications
+  showNotification: (options: { title: string; body: string; icon?: string }) =>
+    ipcRenderer.invoke('show-notification', options),
+
   // Window control
   onWindowMaximized: (callback: () => void) => {
     const listener = () => callback()

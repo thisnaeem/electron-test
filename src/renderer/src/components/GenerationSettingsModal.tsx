@@ -21,8 +21,14 @@ interface GenerationSettingsModalProps {
   onClose: () => void
   onConfirm: (settings: {
     titleWords: number
+    titleMinWords: number
+    titleMaxWords: number
     keywordsCount: number
+    keywordsMinCount: number
+    keywordsMaxCount: number
     descriptionWords: number
+    descriptionMinWords: number
+    descriptionMaxWords: number
     platforms: string[]
     keywordSettings: {
       singleWord: boolean
@@ -60,8 +66,14 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
 
   const [activeTab, setActiveTab] = useState<NavigationTab>('settings')
   const [titleWords, setTitleWords] = useState(generationSettings.titleWords)
+  const [titleMinWords, setTitleMinWords] = useState(generationSettings.titleMinWords)
+  const [titleMaxWords, setTitleMaxWords] = useState(generationSettings.titleMaxWords)
   const [keywordsCount, setKeywordsCount] = useState(generationSettings.keywordsCount)
+  const [keywordsMinCount, setKeywordsMinCount] = useState(generationSettings.keywordsMinCount)
+  const [keywordsMaxCount, setKeywordsMaxCount] = useState(generationSettings.keywordsMaxCount)
   const [descriptionWords, setDescriptionWords] = useState(generationSettings.descriptionWords)
+  const [descriptionMinWords, setDescriptionMinWords] = useState(generationSettings.descriptionMinWords)
+  const [descriptionMaxWords, setDescriptionMaxWords] = useState(generationSettings.descriptionMaxWords)
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(generationSettings.platforms || ['freepik'])
 
   // Keyword settings state - only one should be true by default
@@ -110,8 +122,14 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
     if (isOpen) {
       console.log('🔄 Modal opened, loading saved settings:', generationSettings)
       setTitleWords(generationSettings.titleWords)
+      setTitleMinWords(generationSettings.titleMinWords)
+      setTitleMaxWords(generationSettings.titleMaxWords)
       setKeywordsCount(generationSettings.keywordsCount)
+      setKeywordsMinCount(generationSettings.keywordsMinCount)
+      setKeywordsMaxCount(generationSettings.keywordsMaxCount)
       setDescriptionWords(generationSettings.descriptionWords)
+      setDescriptionMinWords(generationSettings.descriptionMinWords)
+      setDescriptionMaxWords(generationSettings.descriptionMaxWords)
       setSelectedPlatforms(generationSettings.platforms || ['freepik'])
       // Load keyword settings with mutual exclusivity
       const saved = generationSettings.keywordSettings
@@ -257,8 +275,14 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
   const handleConfirm = (): void => {
     const settings = {
       titleWords,
+      titleMinWords,
+      titleMaxWords,
       keywordsCount,
+      keywordsMinCount,
+      keywordsMaxCount,
       descriptionWords,
+      descriptionMinWords,
+      descriptionMaxWords,
       platforms: selectedPlatforms,
       keywordSettings,
       customization,
@@ -529,111 +553,246 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                       </div>
 
                       <div className="space-y-8">
-                        {/* Title Words Setting */}
+                        {/* Title Words Settings */}
                         <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div>
-                              <h4 className="text-lg font-medium text-gray-900 dark:text-white">
-                                Title Length
-                              </h4>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                Number of words for image titles
-                              </p>
-                            </div>
-                            <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                              {titleWords} words
-                            </div>
+                          <div className="mb-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                              Title Length Settings
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Configure minimum and maximum words for image titles
+                            </p>
                           </div>
-                          <div className="relative">
-                            <input
-                              type="range"
-                              min="5"
-                              max="20"
-                              value={titleWords}
-                              onChange={(e) => setTitleWords(parseInt(e.target.value))}
-                              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                              style={{
-                                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((titleWords - 5) / (20 - 5)) * 100}%, #e5e7eb ${((titleWords - 5) / (20 - 5)) * 100}%, #e5e7eb 100%)`
-                              }}
-                            />
-                            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-                              <span>5</span>
-                              <span>10</span>
-                              <span>15</span>
-                              <span>20</span>
+                          
+                          <div className="space-y-6">
+                            {/* Min Title Words */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Min Title Words
+                                </label>
+                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
+                                  {titleMinWords} words
+                                </div>
+                              </div>
+                              <input
+                                type="range"
+                                min="5"
+                                max="20"
+                                value={titleMinWords}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value)
+                                  setTitleMinWords(value)
+                                  if (value > titleMaxWords) setTitleMaxWords(value)
+                                }}
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((titleMinWords - 5) / (20 - 5)) * 100}%, #e5e7eb ${((titleMinWords - 5) / (20 - 5)) * 100}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span>5</span>
+                                <span>10</span>
+                                <span>15</span>
+                                <span>20</span>
+                              </div>
+                            </div>
+
+                            {/* Max Title Words */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Max Title Words
+                                </label>
+                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
+                                  {titleMaxWords} words
+                                </div>
+                              </div>
+                              <input
+                                type="range"
+                                min="5"
+                                max="20"
+                                value={titleMaxWords}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value)
+                                  setTitleMaxWords(value)
+                                  if (value < titleMinWords) setTitleMinWords(value)
+                                }}
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((titleMaxWords - 5) / (20 - 5)) * 100}%, #e5e7eb ${((titleMaxWords - 5) / (20 - 5)) * 100}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span>5</span>
+                                <span>10</span>
+                                <span>15</span>
+                                <span>20</span>
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        {/* Keywords Setting */}
+                        {/* Keywords Settings */}
                         <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div>
-                              <h4 className="text-lg font-medium text-gray-900 dark:text-white">
-                                Keywords Count
-                              </h4>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                Number of keywords to generate
-                              </p>
-                            </div>
-                            <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                              {keywordsCount} keywords
-                            </div>
+                          <div className="mb-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                              Keywords Count Settings
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Configure minimum and maximum keywords to generate
+                            </p>
                           </div>
-                          <div className="relative">
-                            <input
-                              type="range"
-                              min="10"
-                              max="50"
-                              value={keywordsCount}
-                              onChange={(e) => setKeywordsCount(parseInt(e.target.value))}
-                              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                              style={{
-                                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((keywordsCount - 10) / (50 - 10)) * 100}%, #e5e7eb ${((keywordsCount - 10) / (50 - 10)) * 100}%, #e5e7eb 100%)`
-                              }}
-                            />
-                            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-                              <span>10</span>
-                              <span>20</span>
-                              <span>30</span>
-                              <span>40</span>
-                              <span>50</span>
+                          
+                          <div className="space-y-6">
+                            {/* Min Keywords */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Min Keywords
+                                </label>
+                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
+                                  {keywordsMinCount} keywords
+                                </div>
+                              </div>
+                              <input
+                                type="range"
+                                min="10"
+                                max="50"
+                                value={keywordsMinCount}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value)
+                                  setKeywordsMinCount(value)
+                                  if (value > keywordsMaxCount) setKeywordsMaxCount(value)
+                                }}
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((keywordsMinCount - 10) / (50 - 10)) * 100}%, #e5e7eb ${((keywordsMinCount - 10) / (50 - 10)) * 100}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span>10</span>
+                                <span>20</span>
+                                <span>30</span>
+                                <span>40</span>
+                                <span>50</span>
+                              </div>
+                            </div>
+
+                            {/* Max Keywords */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Max Keywords
+                                </label>
+                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
+                                  {keywordsMaxCount} keywords
+                                </div>
+                              </div>
+                              <input
+                                type="range"
+                                min="10"
+                                max="50"
+                                value={keywordsMaxCount}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value)
+                                  setKeywordsMaxCount(value)
+                                  if (value < keywordsMinCount) setKeywordsMinCount(value)
+                                }}
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((keywordsMaxCount - 10) / (50 - 10)) * 100}%, #e5e7eb ${((keywordsMaxCount - 10) / (50 - 10)) * 100}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span>10</span>
+                                <span>20</span>
+                                <span>30</span>
+                                <span>40</span>
+                                <span>50</span>
+                              </div>
                             </div>
                           </div>
                         </div>
 
-                        {/* Description Words Setting */}
+                        {/* Description Words Settings */}
                         <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
-                          <div className="flex items-center justify-between mb-4">
-                            <div>
-                              <h4 className="text-lg font-medium text-gray-900 dark:text-white">
-                                Description Length
-                              </h4>
-                              <p className="text-sm text-gray-600 dark:text-gray-400">
-                                Number of words for descriptions
-                              </p>
-                            </div>
-                            <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                              {descriptionWords} words
-                            </div>
+                          <div className="mb-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                              Description Length Settings
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                              Configure minimum and maximum words for descriptions
+                            </p>
                           </div>
-                          <div className="relative">
-                            <input
-                              type="range"
-                              min="5"
-                              max="20"
-                              value={descriptionWords}
-                              onChange={(e) => setDescriptionWords(parseInt(e.target.value))}
-                              className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                              style={{
-                                background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((descriptionWords - 5) / (20 - 5)) * 100}%, #e5e7eb ${((descriptionWords - 5) / (20 - 5)) * 100}%, #e5e7eb 100%)`
-                              }}
-                            />
-                            <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-                              <span>5</span>
-                              <span>10</span>
-                              <span>15</span>
-                              <span>20</span>
+                          
+                          <div className="space-y-6">
+                            {/* Min Description Words */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Min Description Words
+                                </label>
+                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
+                                  {descriptionMinWords} words
+                                </div>
+                              </div>
+                              <input
+                                type="range"
+                                min="5"
+                                max="50"
+                                value={descriptionMinWords}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value)
+                                  setDescriptionMinWords(value)
+                                  if (value > descriptionMaxWords) setDescriptionMaxWords(value)
+                                }}
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((descriptionMinWords - 5) / (50 - 5)) * 100}%, #e5e7eb ${((descriptionMinWords - 5) / (50 - 5)) * 100}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span>5</span>
+                                <span>15</span>
+                                <span>30</span>
+                                <span>40</span>
+                                <span>50</span>
+                              </div>
+                            </div>
+
+                            {/* Max Description Words */}
+                            <div>
+                              <div className="flex items-center justify-between mb-3">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                  Max Description Words
+                                </label>
+                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
+                                  {descriptionMaxWords} words
+                                </div>
+                              </div>
+                              <input
+                                type="range"
+                                min="5"
+                                max="50"
+                                value={descriptionMaxWords}
+                                onChange={(e) => {
+                                  const value = parseInt(e.target.value)
+                                  setDescriptionMaxWords(value)
+                                  if (value < descriptionMinWords) setDescriptionMinWords(value)
+                                }}
+                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                                style={{
+                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((descriptionMaxWords - 5) / (50 - 5)) * 100}%, #e5e7eb ${((descriptionMaxWords - 5) / (50 - 5)) * 100}%, #e5e7eb 100%)`
+                                }}
+                              />
+                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span>5</span>
+                                <span>15</span>
+                                <span>30</span>
+                                <span>40</span>
+                                <span>50</span>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -778,7 +937,7 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                       </div>
 
                       <motion.div
-                        className="grid grid-cols-3 gap-4"
+                        className="grid grid-cols-4 gap-6"
                         initial="hidden"
                         animate="visible"
                         variants={{
@@ -796,13 +955,7 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                           <motion.button
                             key={platform.id}
                             onClick={() => togglePlatform(platform.id)}
-                            className={`
-                              relative p-4 rounded-2xl transition-all duration-200 border-2
-                              ${selectedPlatforms.includes(platform.id)
-                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg shadow-blue-500/20'
-                                : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-gray-300 dark:hover:border-gray-600 hover:shadow-md'
-                              }
-                            `}
+                            className="relative flex flex-col items-center gap-2 p-2 transition-all duration-200 hover:scale-105"
                             variants={{
                               hidden: { opacity: 0, scale: 0.8, y: 20 },
                               visible: {
@@ -811,28 +964,39 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                                 y: 0
                               }
                             }}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
                           >
+                            {/* Selection indicator */}
                             {selectedPlatforms.includes(platform.id) && (
-                              <div className="absolute -top-2 -right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
-                                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <div className="absolute -top-1 -right-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center z-10">
+                                <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                               </div>
                             )}
-                            <div className="flex flex-col items-center gap-3">
-                              <div className="w-12 h-12 flex items-center justify-center bg-gray-50 dark:bg-gray-700 rounded-xl">
-                                <img
-                                  src={platform.logo}
-                                  alt={platform.name}
-                                  className="w-8 h-8 object-contain"
-                                />
-                              </div>
-                              <span className="text-sm font-medium text-gray-900 dark:text-white text-center">
-                                {platform.name}
-                              </span>
+                            
+                            {/* Platform logo */}
+                            <div className={`w-12 h-12 flex items-center justify-center rounded-lg transition-all duration-200 ${
+                              selectedPlatforms.includes(platform.id)
+                                ? 'bg-blue-100 dark:bg-blue-900/30 ring-2 ring-blue-500'
+                                : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                            }`}>
+                              <img
+                                src={platform.logo}
+                                alt={platform.name}
+                                className="w-8 h-8 object-contain"
+                              />
                             </div>
+                            
+                            {/* Platform name */}
+                            <span className={`text-xs font-medium text-center transition-colors duration-200 ${
+                              selectedPlatforms.includes(platform.id)
+                                ? 'text-blue-700 dark:text-blue-300'
+                                : 'text-gray-700 dark:text-gray-300'
+                            }`}>
+                              {platform.name}
+                            </span>
                           </motion.button>
                         ))}
                       </motion.div>

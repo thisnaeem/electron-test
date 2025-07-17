@@ -444,38 +444,35 @@ const Help = (): React.JSX.Element => {
   }
 
   return (
-    <div className="absolute top-0 left-20 right-0 bottom-0 overflow-auto bg-white dark:bg-[#101113]">
-      <div className="flex h-full">
-        {/* Sidebar */}
-        <div className="w-64 bg-[#f6f6f8] dark:bg-[#2a2d3a] p-6 overflow-y-auto">
-          <h2 className="text-xl font-bold mb-6 text-gray-900 dark:text-white">Help & Support</h2>
-          <nav className="space-y-2">
+    <div className="absolute top-0 left-20 right-0 bottom-0 flex bg-white dark:bg-[#101113] overflow-hidden z-10">
+      {/* Secondary Sidebar */}
+      <div className="w-52 flex-shrink-0 bg-white dark:bg-[#101113] relative z-10">
+        <div className="p-4 pl-6">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-6 text-left">Help & Support</h2>
+          <nav className="space-y-1">
             {sidebarSections.map((section) => (
               <button
                 key={section.id}
                 onClick={() => setActiveSection(section.id)}
-                className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-all duration-200 ${
+                className={`w-full flex items-center gap-3 px-2 py-3 rounded-xl transition-all duration-200 text-left justify-start relative ${
                   activeSection === section.id
-                    ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white shadow-sm'
-                    : 'text-gray-600 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-300 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
+                    ? 'bg-[#f6f6f8] dark:bg-[#2a2d3a] text-gray-900 dark:text-white shadow-sm transform scale-[1.02]'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800/50 hover:scale-[1.01]'
                 }`}
               >
-                <span className={`${
-                  activeSection === section.id
-                    ? 'text-[#1a1b1e] dark:text-white'
-                    : 'text-gray-400 dark:text-gray-400'
-                }`}>
-                  {section.icon}
-                </span>
-                <span className="text-sm font-medium">{section.name}</span>
+                <span className="font-medium">{section.name}</span>
               </button>
             ))}
           </nav>
         </div>
+      </div>
 
-        {/* Main Content */}
-        <div className="flex-1 p-8 overflow-y-auto">
-          {renderContent()}
+      {/* Main Content */}
+      <div className="flex-1 overflow-y-auto bg-white dark:bg-[#101113] relative z-0">
+        <div className="p-6 pb-20">
+          <div className="max-w-4xl">
+            {renderContent()}
+          </div>
         </div>
       </div>
     </div>

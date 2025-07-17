@@ -30,8 +30,9 @@ interface SettingsState {
   isValidatingTogetherApiKey: boolean
   togetherApiKeyValidationError: string | null
 
-  // Dark mode
+  // Theme settings
   isDarkMode: boolean
+  themePreference: 'light' | 'dark' | 'system'
 
   // Onboarding
   hasCompletedOnboarding: boolean
@@ -39,11 +40,20 @@ interface SettingsState {
   // Analytics
   analyticsEnabled: boolean
 
+  // Auto-download settings
+  autoDownloadCsv: boolean
+
   // Generation settings
   generationSettings: {
     titleWords: number
+    titleMinWords: number
+    titleMaxWords: number
     keywordsCount: number
+    keywordsMinCount: number
+    keywordsMaxCount: number
     descriptionWords: number
+    descriptionMinWords: number
+    descriptionMaxWords: number
     platforms: string[] // Array of selected platforms: 'freepik', 'shutterstock', 'adobe-stock'
     keywordSettings?: {
       singleWord: boolean
@@ -114,14 +124,18 @@ const initialState: SettingsState = {
   isValidatingTogetherApiKey: false,
   togetherApiKeyValidationError: null,
 
-  // Dark mode
+  // Theme settings
   isDarkMode: localStorage.getItem('darkMode') === 'true',
+  themePreference: (localStorage.getItem('themePreference') as 'light' | 'dark' | 'system') || 'system',
 
   // Onboarding - check if user has at least 5 valid API keys
   hasCompletedOnboarding: localStorage.getItem('hasCompletedOnboarding') === 'true',
 
   // Analytics
   analyticsEnabled: localStorage.getItem('analyticsEnabled') !== 'false', // Default to true unless explicitly disabled
+
+  // Auto-download settings
+  autoDownloadCsv: localStorage.getItem('autoDownloadCsv') === 'true', // Default to false unless explicitly enabled
 
     // Generation settings - load from localStorage with proper defaults
   generationSettings: (() => {
@@ -226,8 +240,14 @@ const initialState: SettingsState = {
 
       return {
         titleWords: savedTitleWords ? Math.max(5, Math.min(20, parseInt(savedTitleWords))) : 15,
+        titleMinWords: 8,
+        titleMaxWords: 15,
         keywordsCount: savedKeywordsCount ? Math.max(10, Math.min(50, parseInt(savedKeywordsCount))) : 45,
+        keywordsMinCount: 20,
+        keywordsMaxCount: 35,
         descriptionWords: savedDescriptionWords ? Math.max(5, Math.min(20, parseInt(savedDescriptionWords))) : 12,
+        descriptionMinWords: 30,
+        descriptionMaxWords: 40,
         platforms: platforms.length > 0 ? platforms : ['freepik'], // Default to Freepik
         keywordSettings,
         customization,
@@ -237,8 +257,14 @@ const initialState: SettingsState = {
       console.error('❌ Error loading generation settings from localStorage:', error)
       return {
         titleWords: 15,
+        titleMinWords: 8,
+        titleMaxWords: 15,
         keywordsCount: 45,
+        keywordsMinCount: 20,
+        keywordsMaxCount: 35,
         descriptionWords: 12,
+        descriptionMinWords: 30,
+        descriptionMaxWords: 40,
         platforms: ['freepik'],
         keywordSettings: {
           singleWord: true,
@@ -498,7 +524,7 @@ const settingsSlice = createSlice({
       state.togetherApiKeyValidationError = null
     },
 
-    // Dark mode actions
+    // Theme actions
     toggleDarkMode: (state) => {
       state.isDarkMode = !state.isDarkMode
       localStorage.setItem('darkMode', state.isDarkMode.toString())
@@ -523,6 +549,32 @@ const settingsSlice = createSlice({
       }
     },
 
+    setThemePreference: (state, action: PayloadAction<'light' | 'dark' | 'system'>) => {
+      state.themePreference = action.payload
+      localStorage.setItem('themePreference', action.payload)
+
+      // Apply theme based on preference
+      if (action.payload === 'system') {
+        // Detect system preference
+        const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        state.isDarkMode = systemPrefersDark
+        if (systemPrefersDark) {
+          document.documentElement.classList.add('dark')
+        } else {
+          document.documentElement.classList.remove('dark')
+        }
+      } else {
+        const isDark = action.payload === 'dark'
+        state.isDarkMode = isDark
+        if (isDark) {
+          document.documentElement.classList.add('dark')
+        } else {
+          document.documentElement.classList.remove('dark')
+        }
+      }
+      localStorage.setItem('darkMode', state.isDarkMode.toString())
+    },
+
     // Onboarding actions
     completeOnboarding: (state) => {
       state.hasCompletedOnboarding = true
@@ -544,6 +596,12 @@ const settingsSlice = createSlice({
       localStorage.setItem('analyticsEnabled', action.payload.toString())
     },
 
+    // Auto-download actions
+    setAutoDownloadCsv: (state, action: PayloadAction<boolean>) => {
+      state.autoDownloadCsv = action.payload
+      localStorage.setItem('autoDownloadCsv', action.payload.toString())
+    },
+
     // Debug action to check localStorage
     debugGenerationSettings: (state) => {
       console.log('🔍 Debug Generation Settings:')
@@ -556,9 +614,15 @@ const settingsSlice = createSlice({
 
         // Generation settings actions
     updateGenerationSettings: (state, action: PayloadAction<{
-      titleWords: number
-      keywordsCount: number
-      descriptionWords: number
+      titleWords?: number
+      titleMinWords?: number
+      titleMaxWords?: number
+      keywordsCount?: number
+      keywordsMinCount?: number
+      keywordsMaxCount?: number
+      descriptionWords?: number
+      descriptionMinWords?: number
+      descriptionMaxWords?: number
       platforms?: string[]
       keywordSettings?: {
         singleWord: boolean
@@ -582,24 +646,49 @@ const settingsSlice = createSlice({
       }
     }>) => {
       // Validate and clamp values to allowed ranges
-      const titleWords = Math.max(5, Math.min(20, action.payload.titleWords))
-      const keywordsCount = Math.max(10, Math.min(50, action.payload.keywordsCount))
-      const descriptionWords = Math.max(5, Math.min(20, action.payload.descriptionWords))
+      const titleWords = action.payload.titleWords !== undefined ? Math.max(5, Math.min(20, action.payload.titleWords)) : state.generationSettings.titleWords
+      const titleMinWords = action.payload.titleMinWords !== undefined ? Math.max(5, Math.min(20, action.payload.titleMinWords)) : state.generationSettings.titleMinWords
+      const titleMaxWords = action.payload.titleMaxWords !== undefined ? Math.max(5, Math.min(20, action.payload.titleMaxWords)) : state.generationSettings.titleMaxWords
+      
+      const keywordsCount = action.payload.keywordsCount !== undefined ? Math.max(10, Math.min(50, action.payload.keywordsCount)) : state.generationSettings.keywordsCount
+      const keywordsMinCount = action.payload.keywordsMinCount !== undefined ? Math.max(10, Math.min(50, action.payload.keywordsMinCount)) : state.generationSettings.keywordsMinCount
+      const keywordsMaxCount = action.payload.keywordsMaxCount !== undefined ? Math.max(10, Math.min(50, action.payload.keywordsMaxCount)) : state.generationSettings.keywordsMaxCount
+      
+      const descriptionWords = action.payload.descriptionWords !== undefined ? Math.max(5, Math.min(50, action.payload.descriptionWords)) : state.generationSettings.descriptionWords
+      const descriptionMinWords = action.payload.descriptionMinWords !== undefined ? Math.max(5, Math.min(50, action.payload.descriptionMinWords)) : state.generationSettings.descriptionMinWords
+      const descriptionMaxWords = action.payload.descriptionMaxWords !== undefined ? Math.max(5, Math.min(50, action.payload.descriptionMaxWords)) : state.generationSettings.descriptionMaxWords
+      
       const platforms = action.payload.platforms || state.generationSettings.platforms
       const keywordSettings = action.payload.keywordSettings || state.generationSettings.keywordSettings
       const customization = action.payload.customization || state.generationSettings.customization
       const titleCustomization = action.payload.titleCustomization || state.generationSettings.titleCustomization
 
-      console.log('💾 Saving generation settings:', { titleWords, keywordsCount, descriptionWords, platforms, keywordSettings, customization, titleCustomization })
+      console.log('💾 Saving generation settings:', { 
+        titleWords, titleMinWords, titleMaxWords,
+        keywordsCount, keywordsMinCount, keywordsMaxCount,
+        descriptionWords, descriptionMinWords, descriptionMaxWords,
+        platforms, keywordSettings, customization, titleCustomization 
+      })
 
       // Update Redux state
-      state.generationSettings = { titleWords, keywordsCount, descriptionWords, platforms, keywordSettings, customization, titleCustomization }
+      state.generationSettings = { 
+        titleWords, titleMinWords, titleMaxWords,
+        keywordsCount, keywordsMinCount, keywordsMaxCount,
+        descriptionWords, descriptionMinWords, descriptionMaxWords,
+        platforms, keywordSettings, customization, titleCustomization 
+      }
 
       // Save to localStorage for persistence
       try {
         localStorage.setItem('generationTitleWords', titleWords.toString())
+        localStorage.setItem('generationTitleMinWords', titleMinWords.toString())
+        localStorage.setItem('generationTitleMaxWords', titleMaxWords.toString())
         localStorage.setItem('generationKeywordsCount', keywordsCount.toString())
+        localStorage.setItem('generationKeywordsMinCount', keywordsMinCount.toString())
+        localStorage.setItem('generationKeywordsMaxCount', keywordsMaxCount.toString())
         localStorage.setItem('generationDescriptionWords', descriptionWords.toString())
+        localStorage.setItem('generationDescriptionMinWords', descriptionMinWords.toString())
+        localStorage.setItem('generationDescriptionMaxWords', descriptionMaxWords.toString())
         localStorage.setItem('generationPlatforms', JSON.stringify(platforms))
         if (keywordSettings) {
           localStorage.setItem('generationKeywordSettings', JSON.stringify(keywordSettings))
@@ -706,9 +795,11 @@ export const {
   clearTogetherValidationError,
   toggleDarkMode,
   setDarkMode,
+  setThemePreference,
   completeOnboarding,
   checkOnboardingCompletion,
   setAnalyticsEnabled,
+  setAutoDownloadCsv,
   debugGenerationSettings,
   updateGenerationSettings
 } = settingsSlice.actions

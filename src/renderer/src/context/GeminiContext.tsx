@@ -18,10 +18,11 @@ import {
   ApiKeyInfo
 } from '../store/slices/settingsSlice'
 import { rateLimiter } from '../utils/rateLimiter'
+import { compressImageForGemini, isImageWithinSizeLimit, getImageSize } from '../utils/imageCompression'
 
-// Retry configuration
-const MAX_RETRIES = 5 // Increased from 3 to 5 for more aggressive retries
-const RETRY_DELAY = 500 // Reduced from 1000ms to 500ms for faster retries
+// Retry configuration - More aggressive retries, no fallback metadata
+const MAX_RETRIES = 10 // Increased to 10 for more persistent retries
+const RETRY_DELAY = 300 // Reduced to 300ms for faster retries
 // Dynamic parallel limit based on available API keys (minimum 5, maximum 15)
 const getOptimalParallelLimit = (apiKeyCount: number): number => Math.min(Math.max(apiKeyCount, 5), 15)
 
@@ -41,13 +42,19 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
   const abortControllerRef = useRef<AbortController | null>(null)
   const stopRequestedRef = useRef<boolean>(false)
 
-    const generateMetadataForSingleImage = useCallback(async (
+  const generateMetadataForSingleImage = useCallback(async (
     imageInput: ImageInput,
     apiKeyInfo: ApiKeyInfo,
     settings?: {
       titleWords: number;
+      titleMinWords?: number;
+      titleMaxWords?: number;
       keywordsCount: number;
+      keywordsMinCount?: number;
+      keywordsMaxCount?: number;
       descriptionWords: number;
+      descriptionMinWords?: number;
+      descriptionMaxWords?: number;
       keywordSettings?: {
         singleWord: boolean;
         doubleWord: boolean;
@@ -73,10 +80,27 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
     const { imageData, filename, fileType, originalData } = imageInput
 
     try {
-            // Check if base64 data is valid
-            if (!imageData || !imageData.includes(',')) {
-              throw new Error('Invalid image data')
-            }
+      // Check if base64 data is valid
+      if (!imageData || !imageData.includes(',')) {
+        throw new Error('Invalid image data')
+      }
+
+      // Check image size and compress if necessary (Gemini has 4MB limit)
+      const originalSize = getImageSize(imageData)
+      console.log(`📏 Original image size: ${Math.round(originalSize / 1024)}KB`)
+
+      let processedImageData = imageData
+      if (!isImageWithinSizeLimit(imageData)) {
+        console.log(`🗜️ Image ${filename} exceeds 4MB limit, compressing...`)
+        try {
+          const compressionResult = await compressImageForGemini(imageData)
+          processedImageData = compressionResult.compressedData
+          console.log(`✅ Compressed ${filename} from ${Math.round(compressionResult.originalSize / 1024)}KB to ${Math.round(compressionResult.compressedSize / 1024)}KB`)
+        } catch (compressionError) {
+          console.error(`❌ Failed to compress ${filename}:`, compressionError)
+          throw new Error(`Image ${filename} is too large and could not be compressed for Gemini API`)
+        }
+      }
 
       // Special handling for SVG files - they might need additional processing
       if (filename.toLowerCase().endsWith('.svg') && fileType === 'vector') {
@@ -100,9 +124,12 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
       const modelName = 'gemini-2.0-flash'
       const model = genAI.getGenerativeModel({ model: modelName })
 
-      const titleWords = settings?.titleWords || 15
-      const keywordsCount = settings?.keywordsCount || 45
-      const descriptionWords = settings?.descriptionWords || 12
+      const titleMinWords = settings?.titleMinWords || 8
+      const titleMaxWords = settings?.titleMaxWords || 15
+      const keywordsMinCount = settings?.keywordsMinCount || 20
+      const keywordsMaxCount = settings?.keywordsMaxCount || 35
+      const descriptionMinWords = settings?.descriptionMinWords || 30
+      const descriptionMaxWords = settings?.descriptionMaxWords || 40
       const keywordSettings = settings?.keywordSettings
       const customization = settings?.customization
       const titleCustomization = settings?.titleCustomization
@@ -168,7 +195,8 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
       }
 
       // Adjust keywords count if we need to add special keywords
-      const adjustedKeywordsCount = keywordsCount - additionalKeywords.length
+      const adjustedKeywordsMinCount = Math.max(1, keywordsMinCount - additionalKeywords.length)
+      const adjustedKeywordsMaxCount = Math.max(adjustedKeywordsMinCount, keywordsMaxCount - additionalKeywords.length)
 
       // Create file type specific prompt
       let mediaTypeDescription = 'image'
@@ -189,17 +217,18 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
 
       let basePrompt = `Analyze this ${mediaTypeDescription} and provide metadata in the following exact format:
 
-Title: [A descriptive title in exactly ${titleWords} words${titleSuffix ? `, ending with "${titleSuffix.trim()}"` : ''}]
-Description: [A descriptive summary in exactly ${descriptionWords} words]
-Keywords: [Exactly ${adjustedKeywordsCount} relevant keywords separated by commas]
+Title: [A descriptive title between ${titleMinWords} and ${titleMaxWords} words${titleSuffix ? `, ending with "${titleSuffix.trim()}"` : ''}]
+Description: [A descriptive summary between ${descriptionMinWords} and ${descriptionMaxWords} words]
+Keywords: [Between ${adjustedKeywordsMinCount} and ${adjustedKeywordsMaxCount} relevant keywords separated by commas]
 
-Requirements:
-- Title must be exactly ${titleWords} words, descriptive and engaging, no extra characters must be one sentence only like most stock agency ${mediaTypeDescription}s has like adobe stock${titleSuffix ? ` and must end with "${titleSuffix.trim()}"` : ''}${titleStyleInstruction}
-- Description must be exactly ${descriptionWords} words, providing a brief summary of the ${mediaTypeDescription} content
-- Keywords must be ${adjustedKeywordsCount} items, relevant to the ${mediaTypeDescription} content
+STRICT REQUIREMENTS - MUST FOLLOW EXACTLY:
+- Title must be between ${titleMinWords} and ${titleMaxWords} words (not exactly, but within this range), descriptive and engaging, no extra characters, must be one sentence only like most stock agency ${mediaTypeDescription}s has like adobe stock${titleSuffix ? ` and must end with "${titleSuffix.trim()}"` : ''}${titleStyleInstruction}
+- Description must be between ${descriptionMinWords} and ${descriptionMaxWords} words (not exactly, but within this range), providing a comprehensive summary of the ${mediaTypeDescription} content
+- Keywords must be between ${adjustedKeywordsMinCount} and ${adjustedKeywordsMaxCount} items (not exactly, but within this range), all relevant to the ${mediaTypeDescription} content
 - ${analysisInstructions}
 - ${keywordInstruction}
 - Separate keywords with commas only${prohibitedWordsInstruction}
+- CRITICAL: Respect the word/keyword count ranges - generate content within the specified minimum and maximum limits
 
 Respond with only the title, description, and keywords in the specified format.`
 
@@ -210,14 +239,8 @@ Respond with only the title, description, and keywords in the specified format.`
 
       const prompt = basePrompt
 
-      // For vector files, ensure we're using the converted image data
-      let processedImageData = imageData
-
-      // If this is a vector file and we have original data, the imageData should be the preview
-      if (fileType === 'vector' && originalData) {
-        // imageData should already be the converted preview image
-        processedImageData = imageData
-      }
+      // For vector files, the imageData should already be the converted preview image
+      // processedImageData was already set above during compression check
 
       // Enhanced validation for image data
       if (!processedImageData || !processedImageData.includes('data:image/')) {
@@ -273,55 +296,55 @@ Respond with only the title, description, and keywords in the specified format.`
         }
       ]
 
-            const result = await model.generateContent(content)
-            const response = result.response
-            const text = response.text()
+      const result = await model.generateContent(content)
+      const response = result.response
+      const text = response.text()
 
-            if (!text || text.trim().length === 0) {
-              throw new Error('Empty response from Gemini API')
-            }
+      if (!text || text.trim().length === 0) {
+        throw new Error('Empty response from Gemini API')
+      }
 
-            // Parse the response
-            const lines = text.split('\n').filter(line => line.trim())
-            let title = ''
-            let description = ''
-            let keywords: string[] = []
+      // Parse the response
+      const lines = text.split('\n').filter(line => line.trim())
+      let title = ''
+      let description = ''
+      let keywords: string[] = []
 
-            for (const line of lines) {
-              if (line.toLowerCase().includes('title:')) {
-                title = line.replace(/title:/i, '').trim()
-              } else if (line.toLowerCase().includes('description:')) {
-                description = line.replace(/description:/i, '').trim()
-              } else if (line.toLowerCase().includes('keywords:')) {
-                keywords = line
-                  .replace(/keywords:/i, '')
-                  .split(',')
-                  .map(k => k.trim())
-                  .filter(k => k)
-              }
-            }
+      for (const line of lines) {
+        if (line.toLowerCase().includes('title:')) {
+          title = line.replace(/title:/i, '').trim()
+        } else if (line.toLowerCase().includes('description:')) {
+          description = line.replace(/description:/i, '').trim()
+        } else if (line.toLowerCase().includes('keywords:')) {
+          keywords = line
+            .replace(/keywords:/i, '')
+            .split(',')
+            .map(k => k.trim())
+            .filter(k => k)
+        }
+      }
 
-            // Add additional keywords for special features
-            if (additionalKeywords.length > 0) {
-              keywords = [...keywords, ...additionalKeywords]
-            }
+      // Add additional keywords for special features
+      if (additionalKeywords.length > 0) {
+        keywords = [...keywords, ...additionalKeywords]
+      }
 
-            // Apply title customization (prefix/postfix)
-            if (titleCustomization) {
-              let finalTitle = title
+      // Apply title customization (prefix/postfix)
+      if (titleCustomization) {
+        let finalTitle = title
 
-              // Add prefix
-              if (titleCustomization.customPrefix && titleCustomization.prefixText.trim()) {
-                finalTitle = `${titleCustomization.prefixText.trim()} ${finalTitle}`
-              }
+        // Add prefix
+        if (titleCustomization.customPrefix && titleCustomization.prefixText.trim()) {
+          finalTitle = `${titleCustomization.prefixText.trim()} ${finalTitle}`
+        }
 
-              // Add postfix
-              if (titleCustomization.customPostfix && titleCustomization.postfixText.trim()) {
-                finalTitle = `${finalTitle} ${titleCustomization.postfixText.trim()}`
-              }
+        // Add postfix
+        if (titleCustomization.customPostfix && titleCustomization.postfixText.trim()) {
+          finalTitle = `${finalTitle} ${titleCustomization.postfixText.trim()}`
+        }
 
-              title = finalTitle
-            }
+        title = finalTitle
+      }
 
       // Validate response quality - if parsing failed or response is poor, throw error to retry
       if (!title || title.includes('Generated title for')) {
@@ -332,10 +355,10 @@ Respond with only the title, description, and keywords in the specified format.`
       }
 
       return {
-              filename,
-              title,
-              description,
-              keywords
+        filename,
+        title,
+        description,
+        keywords
       }
 
     } catch (error) {
@@ -347,7 +370,7 @@ Respond with only the title, description, and keywords in the specified format.`
     }
   }, [apiKeys, dispatch])
 
-    const generateMetadata = useCallback(async (
+  const generateMetadata = useCallback(async (
     input: ImageInput[],
     onMetadataGenerated?: (result: MetadataResult) => void,
     settings?: {
@@ -550,33 +573,15 @@ Respond with only the title, description, and keywords in the specified format.`
                   lastError = error instanceof Error ? error : new Error(String(error))
                   retryCount++
 
-                  // Check for specific image validation errors
+                  // Log specific error types for debugging
                   const errorMessage = lastError.message.toLowerCase()
                   const isImageValidationError = errorMessage.includes('provided image is not valid') ||
-                                               errorMessage.includes('invalid image') ||
-                                               errorMessage.includes('image format')
+                    errorMessage.includes('invalid image') ||
+                    errorMessage.includes('image format')
 
-                  if (isImageValidationError && imageInput.fileType === 'vector' && imageInput.filename.toLowerCase().endsWith('.svg')) {
-                    console.error(`🎨 SVG conversion issue for ${imageInput.filename}: ${lastError.message}`)
-
-                    // For SVG files with image validation errors, create a more descriptive fallback
-                    if (retryCount > 2) { // Give up after a few retries for image validation issues
-                      console.warn(`⚠️ SVG conversion failed for ${imageInput.filename}, creating vector-specific fallback`)
-                      results[imageIndex] = {
-                        filename: imageInput.filename,
-                        title: `Vector Graphic Design Element ${imageInput.filename.replace('.svg', '')}`,
-                        keywords: ['vector', 'graphic', 'design', 'svg', 'illustration', 'icon', 'element', 'digital', 'art', 'symbol', 'logo', 'scalable', 'graphic design', 'visual', 'creative'],
-                        description: `Scalable vector graphic design element ideal for digital projects and branding applications`
-                      }
-
-                      // Update completed count for fallback
-                      setProcessingProgress(prev => prev ? {
-                        ...prev,
-                        completed: prev.completed + 1
-                      } : null)
-
-                      return
-                    }
+                  if (isImageValidationError) {
+                    console.error(`🎨 Image validation issue for ${imageInput.filename}: ${lastError.message}`)
+                    // Continue retrying - no fallback metadata
                   }
 
                   console.error(`❌ Attempt ${retryCount} failed for ${imageInput.filename}:`, lastError.message)
@@ -599,37 +604,13 @@ Respond with only the title, description, and keywords in the specified format.`
                     }
                   })
 
-                  // If we've exhausted all retries, only then use fallback
+                  // If we've exhausted all retries, mark as failed (no fallback metadata)
                   if (retryCount > MAX_RETRIES) {
-                    console.warn(`⚠️ All retries exhausted for ${imageInput.filename}, using fallback`)
-
-                    // Create better fallback based on file type
-                    let fallbackResult: MetadataResult
-
-                    if (imageInput.fileType === 'vector' && imageInput.filename.toLowerCase().endsWith('.svg')) {
-                      fallbackResult = {
-                        filename: imageInput.filename,
-                        title: `Vector Graphic Design Element ${imageInput.filename.replace('.svg', '')}`,
-                        keywords: ['vector', 'graphic', 'design', 'svg', 'illustration', 'icon', 'element', 'digital', 'art', 'symbol', 'logo', 'scalable', 'graphic design', 'visual', 'creative'],
-                        description: `Scalable vector graphic design element ideal for digital projects and branding applications`
-                      }
-                    } else {
-                      fallbackResult = {
-                        filename: imageInput.filename,
-                        title: `Generated title for ${imageInput.filename}`,
-                        keywords: ['image', 'photo', 'picture', 'metadata', 'generated'],
-                        description: `A generated description for ${imageInput.filename}`
-                      }
-                    }
-
-                    results[imageIndex] = fallbackResult
-
-                    // Update completed count for fallback
-                    setProcessingProgress(prev => prev ? {
-                      ...prev,
-                      completed: prev.completed + 1
-                    } : null)
-
+                    console.error(`❌ All retries exhausted for ${imageInput.filename} - marking as failed`)
+                    
+                    // Don't add any result - let it remain undefined to indicate failure
+                    // This will be filtered out later and the UI will show an error indicator
+                    
                     return
                   }
 
@@ -968,7 +949,7 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
   }, [apiKeys, apiKey, isApiKeyValid, dispatch])
 
   // Chat functionality
-  const chat = useCallback(async (message: string, images?: string[], conversationHistory?: Array<{role: 'user' | 'assistant', content: string, images?: string[]}>): Promise<string> => {
+  const chat = useCallback(async (message: string, images?: string[], conversationHistory?: Array<{ role: 'user' | 'assistant', content: string, images?: string[] }>): Promise<string> => {
     const validApiKeys = apiKeys.filter(key => key.isValid)
 
     if (validApiKeys.length === 0) {

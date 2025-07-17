@@ -32,8 +32,14 @@ interface UploadedImagesDisplayProps {
   onClear: () => void
     onProcess?: (files: File[] | ImageInput[], settings?: {
     titleWords: number;
+    titleMinWords?: number;
+    titleMaxWords?: number;
     keywordsCount: number;
+    keywordsMinCount?: number;
+    keywordsMaxCount?: number;
     descriptionWords: number;
+    descriptionMinWords?: number;
+    descriptionMaxWords?: number;
     keywordSettings?: {
       singleWord: boolean;
       doubleWord: boolean;
@@ -46,6 +52,13 @@ interface UploadedImagesDisplayProps {
       prohibitedWordsList: string;
       transparentBackground: boolean;
       silhouette: boolean;
+    }
+    titleCustomization?: {
+      titleStyle: string;
+      customPrefix: boolean;
+      prefixText: string;
+      customPostfix: boolean;
+      postfixText: string;
     }
   }) => void
   onFilesAccepted: (files: File[] | ImageInput[]) => void
@@ -180,8 +193,14 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
     const handleConfirmGeneration = useCallback((settings: {
     titleWords: number;
+    titleMinWords?: number;
+    titleMaxWords?: number;
     keywordsCount: number;
+    keywordsMinCount?: number;
+    keywordsMaxCount?: number;
     descriptionWords: number;
+    descriptionMinWords?: number;
+    descriptionMaxWords?: number;
     keywordSettings?: {
       singleWord: boolean;
       doubleWord: boolean;
@@ -194,6 +213,13 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
       prohibitedWordsList: string;
       transparentBackground: boolean;
       silhouette: boolean;
+    }
+    titleCustomization?: {
+      titleStyle: string;
+      customPrefix: boolean;
+      prefixText: string;
+      customPostfix: boolean;
+      postfixText: string;
     }
   }): void => {
     if (files.length > 0) {
@@ -804,6 +830,17 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
+                </div>
+              )}
+
+              {/* Metadata generation failed indicator - Red cross for failed images */}
+              {!hasFileMetadata && !isCurrentlyProcessing && metadataResults && metadataResults.length > 0 && (
+                <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 shadow-lg">
+                  <Tooltip text="Metadata generation failed">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </Tooltip>
                 </div>
               )}
 

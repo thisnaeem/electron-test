@@ -13,7 +13,7 @@ const Generator = (): React.JSX.Element => {
   const { generateMetadata, stopGeneration, isLoading, error, processingProgress, generationStartTime } = useGemini()
   const dispatch = useAppDispatch()
   const { files, metadata } = useAppSelector(state => state.files)
-  const { hasCompletedOnboarding, apiKeys, generationSettings } = useAppSelector(state => state.settings)
+  const { hasCompletedOnboarding, apiKeys, generationSettings, autoDownloadCsv } = useAppSelector(state => state.settings)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
 
@@ -48,8 +48,14 @@ const Generator = (): React.JSX.Element => {
 
     const handleProcess = useCallback(async (input: File[] | ImageInput[], settings?: {
     titleWords: number;
+    titleMinWords?: number;
+    titleMaxWords?: number;
     keywordsCount: number;
+    keywordsMinCount?: number;
+    keywordsMaxCount?: number;
     descriptionWords: number;
+    descriptionMinWords?: number;
+    descriptionMaxWords?: number;
     keywordSettings?: {
       singleWord: boolean;
       doubleWord: boolean;
@@ -114,20 +120,77 @@ const Generator = (): React.JSX.Element => {
       // Use the new parallel processing system with real-time callback
       const results = await generateMetadata(imageInputs, handleMetadataGenerated, settings)
 
+      // Filter out undefined results (failed generations)
+      const successfulResults = results.filter(r => r !== undefined)
+      const failedCount = imageInputs.length - successfulResults.length
+
       // Final fallback - ensure any missed results are added
       // (This shouldn't be needed with real-time updates, but kept as safety net)
       const existingFilenames = metadata.map(m => m.filename)
-      const newResults = results.filter(r => !existingFilenames.includes(r.filename))
+      const newResults = successfulResults.filter(r => !existingFilenames.includes(r.filename))
       if (newResults.length > 0) {
         console.log(`📋 Adding ${newResults.length} missed results to store`)
         dispatch(addMetadata(newResults))
+      }
+
+      // Show native notification when generation completes
+      if (successfulResults.length > 0) {
+        const notificationBody = failedCount > 0 
+          ? `Successfully generated metadata for ${successfulResults.length} image${successfulResults.length > 1 ? 's' : ''}. ${failedCount} failed.`
+          : `Successfully generated metadata for ${successfulResults.length} image${successfulResults.length > 1 ? 's' : ''}`
+        
+        try {
+          await window.api.showNotification({
+            title: 'Metadata Generation Complete',
+            body: notificationBody
+          })
+        } catch (error) {
+          console.log('Could not show notification:', error)
+        }
+      } else if (failedCount > 0) {
+        // All failed
+        try {
+          await window.api.showNotification({
+            title: 'Metadata Generation Failed',
+            body: `Failed to generate metadata for ${failedCount} image${failedCount > 1 ? 's' : ''}. Please check image quality and try again.`
+          })
+        } catch (error) {
+          console.log('Could not show notification:', error)
+        }
+      }
+
+      // Auto-download CSV if enabled and we have successful results
+      if (autoDownloadCsv && successfulResults.length > 0) {
+        console.log('🚀 Auto-downloading CSV after generation completion')
+        
+        // Small delay to ensure state is fully updated
+        setTimeout(() => {
+          // Get the complete metadata (including any existing + new results)
+          const allMetadata = [...metadata, ...newResults]
+          
+          if (allMetadata.length > 0) {
+            const selectedPlatforms = generationSettings.platforms || ['freepik']
+            
+            // Convert MetadataResult to ImageData format
+            const imageDataList: ImageData[] = allMetadata.map(result => ({
+              filename: result.filename,
+              title: result.title,
+              keywords: result.keywords,
+              description: result.description || ''
+            }))
+
+            // Trigger automatic CSV download
+            downloadMultiPlatformCSVs(selectedPlatforms, imageDataList)
+            console.log('✅ Auto-download CSV completed')
+          }
+        }, 500) // 500ms delay to ensure UI state is updated
       }
 
     } catch (err) {
       console.error('Error generating metadata:', err)
       setShowErrorDialog(true)
     }
-  }, [generateMetadata, dispatch, metadata, needsOnboarding])
+  }, [generateMetadata, dispatch, metadata, needsOnboarding, autoDownloadCsv, generationSettings.platforms])
 
   const handleImageRemoved = useCallback((filename: string) => {
     // Remove metadata for the removed image

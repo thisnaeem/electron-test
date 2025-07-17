@@ -5,6 +5,7 @@ export interface MetadataResult {
   title: string
   description: string
   keywords: string[]
+  failed?: boolean // Optional flag to indicate generation failure
 }
 
 export interface ImageInput {
@@ -72,8 +73,14 @@ export interface GeminiContextType {
   // Enhanced metadata generation with parallel processing
   generateMetadata: (input: ImageInput[], onMetadataGenerated?: (result: MetadataResult) => void, settings?: {
     titleWords: number;
+    titleMinWords?: number;
+    titleMaxWords?: number;
     keywordsCount: number;
+    keywordsMinCount?: number;
+    keywordsMaxCount?: number;
     descriptionWords: number;
+    descriptionMinWords?: number;
+    descriptionMaxWords?: number;
     keywordSettings?: {
       singleWord: boolean;
       doubleWord: boolean;
@@ -86,6 +93,13 @@ export interface GeminiContextType {
       prohibitedWordsList: string;
       transparentBackground: boolean;
       silhouette: boolean;
+    }
+    titleCustomization?: {
+      titleStyle: string;
+      customPrefix: boolean;
+      prefixText: string;
+      customPostfix: boolean;
+      postfixText: string;
     }
   }) => Promise<MetadataResult[]>
 

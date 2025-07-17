@@ -1,27 +1,128 @@
-import { useAppSelector, useAppDispatch } from '../store/hooks'
-import { setUnauthenticated, showAuthModal } from '../store/slices/authSlice'
-import keyAuthService from '../services/keyauth'
+import { useState, useEffect } from 'react'
+
+interface UserInfo {
+  username: string
+  subscription: string
+  subscriptionExpiry: string
+  ip: string
+  hwid: string
+  createDate: string
+  lastLogin: string
+}
 
 const LicenseStatus = (): React.JSX.Element => {
-  const dispatch = useAppDispatch()
-  const { isAuthenticated, user } = useAppSelector(state => state.auth)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState<UserInfo | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
 
-  const handleLogout = () => {
-    keyAuthService.logout()
-    localStorage.removeItem('keyauth_user')
-    dispatch(setUnauthenticated())
+  // Check authentication status from localStorage
+  useEffect(() => {
+    const checkAuthStatus = () => {
+      try {
+        const storedAuth = localStorage.getItem('keyauth_user')
+        if (!storedAuth) {
+          setIsAuthenticated(false)
+          setUser(null)
+          setIsLoading(false)
+          return
+        }
+
+        const authData = JSON.parse(storedAuth)
+        
+        // Check if stored credentials are not too old (30 days)
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000)
+        if (authData.timestamp < thirtyDaysAgo) {
+          localStorage.removeItem('keyauth_user')
+          setIsAuthenticated(false)
+          setUser(null)
+          setIsLoading(false)
+          return
+        }
+
+        // Set user data
+        setUser(authData.userInfo)
+        setIsAuthenticated(true)
+        setIsLoading(false)
+      } catch (error) {
+        console.error('Error checking auth status:', error)
+        localStorage.removeItem('keyauth_user')
+        setIsAuthenticated(false)
+        setUser(null)
+        setIsLoading(false)
+      }
+    }
+
+    checkAuthStatus()
+
+    // Listen for storage changes (in case user logs out from another window)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'keyauth_user') {
+        checkAuthStatus()
+      }
+    }
+
+    window.addEventListener('storage', handleStorageChange)
+    return () => window.removeEventListener('storage', handleStorageChange)
+  }, [])
+
+  const handleLogout = async () => {
+    try {
+      // Clear localStorage
+      localStorage.removeItem('keyauth_user')
+      
+      // Call logout API
+      await window.api.keyauth.logout()
+      
+      // Update local state
+      setIsAuthenticated(false)
+      setUser(null)
+      
+      // Restart the app to show license screen
+      window.location.reload()
+    } catch (error) {
+      console.error('Error during logout:', error)
+      // Still clear local state even if API call fails
+      localStorage.removeItem('keyauth_user')
+      setIsAuthenticated(false)
+      setUser(null)
+      window.location.reload()
+    }
   }
 
-  const handleShowAuth = () => {
-    dispatch(showAuthModal())
+  const handleActivate = () => {
+    // Restart the app to show license screen
+    window.location.reload()
   }
 
   const getDaysRemaining = () => {
-    return keyAuthService.getDaysRemainingSync()
+    if (!user) return 0
+    
+    const expiryDate = new Date(user.subscriptionExpiry)
+    const now = new Date()
+    const diffTime = expiryDate.getTime() - now.getTime()
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    
+    return Math.max(0, diffDays)
   }
 
   const isSubscriptionValid = () => {
-    return keyAuthService.isSubscriptionValidSync()
+    if (!user) return false
+    
+    const expiryDate = new Date(user.subscriptionExpiry)
+    const now = new Date()
+    
+    return expiryDate > now
+  }
+
+  if (isLoading) {
+    return (
+      <div className="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
+        <div className="flex items-center">
+          <div className="animate-spin w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full mr-2"></div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Checking license status...</p>
+        </div>
+      </div>
+    )
   }
 
   if (!isAuthenticated || !user) {
@@ -42,7 +143,7 @@ const LicenseStatus = (): React.JSX.Element => {
             </div>
           </div>
           <button
-            onClick={handleShowAuth}
+            onClick={handleActivate}
             className="bg-orange-600 hover:bg-orange-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
           >
             Activate
@@ -103,7 +204,7 @@ const LicenseStatus = (): React.JSX.Element => {
         <div className="flex items-center gap-2">
           {!isValid && (
             <button
-              onClick={handleShowAuth}
+              onClick={handleActivate}
               className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-3 py-1.5 rounded-md transition-colors"
             >
               Renew
@@ -111,8 +212,11 @@ const LicenseStatus = (): React.JSX.Element => {
           )}
           <button
             onClick={handleLogout}
-            className="text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 text-sm font-medium px-3 py-1.5 rounded-md transition-colors"
+            className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 hover:text-gray-900 dark:hover:text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
           >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
             Logout
           </button>
         </div>
