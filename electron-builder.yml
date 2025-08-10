@@ -14,13 +14,28 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+icon: resources/app-logo.ico
 win:
   executableName: csvgen-pro
+  target:
+    - target: nsis
+      arch:
+        - x64
+  requestedExecutionLevel: asInvoker
+  signAndEditExecutable: false
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  createStartMenuShortcut: true
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/app-logo.ico
+  uninstallerIcon: resources/app-logo.ico
+  installerHeaderIcon: resources/app-logo.ico
+  runAfterFinish: true
+  menuCategory: false
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
@@ -47,4 +62,3 @@ publish:
   repo: electron-test
   private: false
   releaseType: release
-icon: resources/app-logo.png

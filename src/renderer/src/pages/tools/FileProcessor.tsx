@@ -3,7 +3,7 @@ import React from 'react'
 const FileProcessor = (): React.JSX.Element => {
   const openFileProcessorWebsite = (): void => {
     // Open csvgen.com
-    window.open('https://www.csvgen.com', '_blank')
+    window.open('https://www.csvgen.com/tools/filename-extractor', '_blank')
   }
 
   return (

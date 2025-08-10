@@ -6,20 +6,33 @@ import { addMetadata, updateMetadata, removeMetadata, clearMetadata } from '../s
 import ImageUploader from '../components/ImageUploader'
 import UploadedImagesDisplay from '../components/UploadedImagesDisplay'
 import UploadProcessingModal from '../components/UploadProcessingModal'
+import GeneratorAccessGuard from '../components/GeneratorAccessGuard'
 import { downloadMultiPlatformCSVs, ImageData } from '../utils/csvGenerator'
+import { apiKeyValidationService } from '../services/ApiKeyValidationService'
 // Remove: import TitleBar from '../components/TitleBar'
 
 const Generator = (): React.JSX.Element => {
   const { generateMetadata, stopGeneration, isLoading, error, processingProgress, generationStartTime } = useGemini()
   const dispatch = useAppDispatch()
   const { files, metadata } = useAppSelector(state => state.files)
-  const { hasCompletedOnboarding, apiKeys, generationSettings, autoDownloadCsv } = useAppSelector(state => state.settings)
+  const { apiKeys, generationSettings, autoDownloadCsv, metadataProvider, openaiApiKey, isOpenaiApiKeyValid, openaiSelectedModel, groqApiKey, isGroqApiKeyValid, openrouterApiKey, isOpenrouterApiKeyValid, openrouterSelectedModel } = useAppSelector(state => state.settings)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
 
-  // Check if user has completed onboarding (5+ valid API keys)
-  const validApiKeysCount = apiKeys.filter(key => key.isValid).length
-  const needsOnboarding = !hasCompletedOnboarding || validApiKeysCount < 5
+  // Use the validation service to check generator access with provider-specific logic
+  const accessResult = apiKeyValidationService.checkGeneratorAccess(
+    apiKeys,
+    metadataProvider,
+    {
+      openaiApiKey,
+      isOpenaiApiKeyValid,
+      groqApiKey,
+      isGroqApiKeyValid,
+      openrouterApiKey,
+      isOpenrouterApiKeyValid
+    }
+  )
+  const needsOnboarding = !accessResult.hasAccess
 
   // Clear metadata when no files are left
   useEffect(() => {
@@ -82,6 +95,24 @@ const Generator = (): React.JSX.Element => {
     // Check if user has enough API keys to use the generator
     if (needsOnboarding) {
       // Show inline message instead of processing
+      return
+    }
+
+    // Check if OpenAI is selected but not configured
+    if (metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid)) {
+      setShowErrorDialog(true)
+      return
+    }
+
+    // Check if Groq is selected but not configured
+    if (metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)) {
+      setShowErrorDialog(true)
+      return
+    }
+
+    // Check if OpenRouter is selected but not configured
+    if (metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)) {
+      setShowErrorDialog(true)
       return
     }
 
@@ -180,7 +211,7 @@ const Generator = (): React.JSX.Element => {
             }))
 
             // Trigger automatic CSV download
-            downloadMultiPlatformCSVs(selectedPlatforms, imageDataList)
+            downloadMultiPlatformCSVs(selectedPlatforms, imageDataList, generationSettings.platformOptions)
             console.log('✅ Auto-download CSV completed')
           }
         }, 500) // 500ms delay to ensure UI state is updated
@@ -256,8 +287,8 @@ const Generator = (): React.JSX.Element => {
     }))
 
     // Use the new comprehensive CSV generator for all platforms
-    downloadMultiPlatformCSVs(selectedPlatforms, imageDataList)
-  }, [metadata, generationSettings.platforms])
+    downloadMultiPlatformCSVs(selectedPlatforms, imageDataList, generationSettings.platformOptions)
+  }, [metadata, generationSettings.platforms, generationSettings.platformOptions])
 
   const handleMetadataUpdated = useCallback((filename: string, updatedMetadata: { title: string; keywords: string[]; description?: string }) => {
     dispatch(updateMetadata({
@@ -275,60 +306,115 @@ const Generator = (): React.JSX.Element => {
       <div className="flex-1 min-h-0 w-full p-4 relative space-y-4 overflow-y-auto">
         {/* Upload Processing Modal */}
         <UploadProcessingModal />
-        {/* Image Uploader or API Keys Required Message */}
+        
+        {/* Provider Status Indicator */}
+        <div className="flex justify-between items-center mb-4">
+          <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+            <div className={`w-3 h-3 rounded-full ${
+              metadataProvider === 'gemini' ? 'bg-blue-500' : 
+              metadataProvider === 'openai' ? 'bg-black' : 
+              metadataProvider === 'groq' ? 'bg-orange-500' :
+              'bg-purple-500'
+            }`}></div>
+            <span className="text-sm text-gray-700 dark:text-gray-300">
+              Using {
+                metadataProvider === 'gemini' ? 'Google Gemini' : 
+                metadataProvider === 'openai' ? `OpenAI ${openaiSelectedModel || 'GPT-4o-mini'}` : 
+                metadataProvider === 'groq' ? 'Groq LLaVA-v1.5-7B' :
+                `OpenRouter ${openrouterSelectedModel?.split('/')[1]?.split(':')[0] || 'Model'}`
+              } for metadata generation
+            </span>
+            {metadataProvider === 'openai' && !isOpenaiApiKeyValid && (
+              <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                API key not configured
+              </span>
+            )}
+            {metadataProvider === 'groq' && !isGroqApiKeyValid && (
+              <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                API key not configured
+              </span>
+            )}
+            {metadataProvider === 'openrouter' && !isOpenrouterApiKeyValid && (
+              <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
+                API key not configured
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => window.location.hash = '#/settings'}
+            className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-200"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+            Change Provider
+          </button>
+        </div>
+        {/* Image Uploader with Access Guard */}
         {files.length === 0 && !isLoading && (
-          <div className="h-full flex items-center justify-center">
-            {needsOnboarding ? (
-              <div className="w-full max-w-2xl p-12 bg-[#f3f4f6] dark:bg-[#2a2d3a] rounded-2xl text-center">
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-xl font-medium text-gray-900 dark:text-white">Generator Requires API Keys</h3>
-                    <p className="text-gray-600 dark:text-gray-300 mt-2">
-                      Add 5 Gemini API keys in Settings to use the generator feature.
-                    </p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      Current: {validApiKeysCount}/5
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => window.location.hash = '#/settings'}
-                    className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
-                  >
-                    Go to Settings
-                  </button>
-                </div>
-              </div>
-            ) : (
+          <GeneratorAccessGuard>
+            <div className="h-full flex items-center justify-center">
               <ImageUploader
                 onFilesAccepted={handleFilesAccepted}
                 isProcessing={isLoading}
               />
-            )}
-          </div>
+            </div>
+          </GeneratorAccessGuard>
         )}
 
         {/* Uploaded Images Display - Only show if files exist */}
         {files.length > 0 && (
-          <UploadedImagesDisplay
-            onClear={handleClear}
-            onProcess={handleProcess}
-            onFilesAccepted={handleFilesAccepted}
-            onImageRemoved={handleImageRemoved}
-            onImageSelected={handleImageSelected}
-            selectedImageId={selectedImageId}
-            isProcessing={isLoading}
-            hasMetadata={metadata.length > 0}
-            metadataResults={metadata}
-            onExportCSV={handleExportCSV}
-            processingProgress={processingProgress ? {
-              current: processingProgress.completed,
-              total: processingProgress.total
-            } : undefined}
-            currentProcessingFilename={processingProgress?.currentFilename || null}
-            generationStartTime={generationStartTime}
-            onMetadataUpdated={handleMetadataUpdated}
-            onStopGeneration={stopGeneration}
-          />
+          <GeneratorAccessGuard
+            fallback={
+              <div className="h-full flex items-center justify-center">
+                <div className="w-full max-w-2xl p-8 bg-orange-50 dark:bg-orange-900/20 rounded-2xl text-center border border-orange-200 dark:border-orange-800">
+                  <div className="space-y-4">
+                    <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 rounded-full flex items-center justify-center mx-auto">
+                      <svg className="w-6 h-6 text-orange-600 dark:text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-medium text-orange-900 dark:text-orange-100">
+                        Generator Access Lost
+                      </h3>
+                      <p className="text-orange-700 dark:text-orange-300 mt-1">
+                        You need {accessResult.requiredKeyCount} valid API keys to process images. 
+                        Currently have {accessResult.validKeyCount} valid keys.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => window.location.hash = '#/settings'}
+                      className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-lg transition-colors"
+                    >
+                      Fix API Keys
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
+          >
+            <UploadedImagesDisplay
+              onClear={handleClear}
+              onProcess={handleProcess}
+              onFilesAccepted={handleFilesAccepted}
+              onImageRemoved={handleImageRemoved}
+              onImageSelected={handleImageSelected}
+              selectedImageId={selectedImageId}
+              isProcessing={isLoading}
+              hasMetadata={metadata.length > 0}
+              metadataResults={metadata}
+              onExportCSV={handleExportCSV}
+              processingProgress={processingProgress ? {
+                current: processingProgress.completed,
+                total: processingProgress.total
+              } : undefined}
+              currentProcessingFilename={processingProgress?.currentFilename || null}
+              generationStartTime={generationStartTime}
+              onMetadataUpdated={handleMetadataUpdated}
+              onStopGeneration={stopGeneration}
+            />
+          </GeneratorAccessGuard>
         )}
 
         {/* Error Dialog */}
@@ -340,11 +426,23 @@ const Generator = (): React.JSX.Element => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                  Generation Failed
+                  {metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid) 
+                    ? 'OpenAI API Key Required' 
+                    : metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)
+                    ? 'Groq API Key Required'
+                    : metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)
+                    ? 'OpenRouter API Key Required'
+                    : 'Generation Failed'}
                 </h3>
               </div>
               <p className="text-gray-600 dark:text-gray-300 mb-6">
-                {error || 'An error occurred while generating metadata. Please try again.'}
+                {metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid)
+                  ? 'You have selected OpenAI as your metadata provider, but no valid API key is configured. Please add and validate your OpenAI API key in Settings.'
+                  : metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)
+                  ? 'You have selected Groq as your metadata provider, but no valid API key is configured. Please add and validate your Groq API key in Settings.'
+                  : metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)
+                  ? 'You have selected OpenRouter as your metadata provider, but no valid API key is configured. Please add and validate your OpenRouter API key in Settings.'
+                  : (error || 'An error occurred while generating metadata. Please try again.')}
               </p>
               <div className="flex justify-end gap-3">
                 <button
@@ -353,12 +451,26 @@ const Generator = (): React.JSX.Element => {
                 >
                   Close
                 </button>
-                <button
-                  onClick={handleRetry}
-                  className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
-                >
-                  Retry
-                </button>
+                {(metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid)) || 
+                 (metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)) ||
+                 (metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)) ? (
+                  <button
+                    onClick={() => {
+                      handleCloseErrorDialog()
+                      window.location.hash = '#/settings'
+                    }}
+                    className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Go to Settings
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleRetry}
+                    className="px-6 py-2.5 bg-[#f5f5f5] hover:bg-gray-200 text-gray-800 rounded-lg font-medium transition-colors"
+                  >
+                    Retry
+                  </button>
+                )}
               </div>
             </div>
           </div>

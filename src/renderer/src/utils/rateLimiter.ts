@@ -1,13 +1,17 @@
 import { ApiKeyInfo } from '../store/slices/settingsSlice'
 import { RateLimitInfo } from '../context/GeminiContext.types'
 
-// Gemini API rate limit: 12 requests per minute per API key
-const REQUESTS_PER_MINUTE = 12
+// Gemini API rate limit: 14 requests per minute per API key
+const REQUESTS_PER_MINUTE = 14
 const MINUTE_IN_MS = 60 * 1000
+const SAFETY_BUFFER = 3 // Increased safety buffer to avoid hitting limits
+const MIN_REQUEST_INTERVAL = 5000 // Minimum 5 seconds between requests from same key
 
 export class RateLimiter {
   private rateLimitInfo: { [apiKeyId: string]: RateLimitInfo } = {}
-  private roundRobinIndex: number = 0 // For round-robin distribution
+  // private roundRobinIndex: number = 0 // For round-robin distribution (not used)
+  private globalRequestCount: number = 0
+  private globalWindowStart: number = Date.now()
 
   constructor() {
     // Clean up old rate limit data on initialization
@@ -21,7 +25,13 @@ export class RateLimiter {
     const info = this.getRateLimitInfo(apiKeyId)
     const now = Date.now()
 
-    // Reset window if minute has passed
+    // Reset global window if minute has passed
+    if (now - this.globalWindowStart >= MINUTE_IN_MS) {
+      this.globalRequestCount = 0
+      this.globalWindowStart = now
+    }
+
+    // Reset individual key window if minute has passed
     if (now - info.windowStartTime >= MINUTE_IN_MS) {
       info.requestsInCurrentMinute = 0
       info.windowStartTime = now
@@ -29,7 +39,24 @@ export class RateLimiter {
       info.nextAvailableTime = 0
     }
 
-    return info.requestsInCurrentMinute < REQUESTS_PER_MINUTE
+    // Check minimum interval between requests (increased to 10 seconds)
+    if ((info as any).lastRequestTime && (now - (info as any).lastRequestTime) < (MIN_REQUEST_INTERVAL * 2)) {
+      console.log(`🚫 API key ${apiKeyId} still in cooldown period`)
+      return false
+    }
+
+    // Global rate limiting: max 5 requests per minute across ALL keys
+    if (this.globalRequestCount >= 5) {
+      console.log(`🚫 Global rate limit reached: ${this.globalRequestCount}/5 requests in current window`)
+      return false
+    }
+
+    // Use safety buffer to avoid hitting exact rate limit
+    const canMake = info.requestsInCurrentMinute < (REQUESTS_PER_MINUTE - SAFETY_BUFFER)
+    if (!canMake) {
+      console.log(`🚫 API key ${apiKeyId} rate limited: ${info.requestsInCurrentMinute}/${REQUESTS_PER_MINUTE - SAFETY_BUFFER}`)
+    }
+    return canMake
   }
 
   /**
@@ -46,20 +73,22 @@ export class RateLimiter {
     }
 
     info.requestsInCurrentMinute++
+    ;(info as any).lastRequestTime = now
 
-    // Check if we've hit the limit
-    if (info.requestsInCurrentMinute >= REQUESTS_PER_MINUTE) {
+    // Check if we've hit the limit (with safety buffer)
+    if (info.requestsInCurrentMinute >= (REQUESTS_PER_MINUTE - SAFETY_BUFFER)) {
       info.isLimited = true
       // Next available time is when the current window expires
       info.nextAvailableTime = info.windowStartTime + MINUTE_IN_MS
     }
 
     this.rateLimitInfo[apiKeyId] = info
+    console.log(`📊 API Key ${apiKeyId}: ${info.requestsInCurrentMinute}/${REQUESTS_PER_MINUTE - SAFETY_BUFFER} requests in current window`)
   }
 
-      /**
+  /**
    * Get the next available API key that can make a request
-   * Uses strict round-robin distribution: 1->2->3->...->N->1->2->3...
+   * Uses intelligent load balancing with round-robin fallback
    */
   getNextAvailableApiKey(apiKeys: ApiKeyInfo[]): ApiKeyInfo | null {
     const validApiKeys = apiKeys.filter(key => key.isValid)
@@ -69,19 +98,24 @@ export class RateLimiter {
     const availableKeys = validApiKeys.filter(key => this.canMakeRequest(key.id))
 
     if (availableKeys.length > 0) {
-      // Strict round-robin: always use the next key in sequence
-      // Reset index if it's out of bounds for available keys
-      if (this.roundRobinIndex >= availableKeys.length) {
-        this.roundRobinIndex = 0
-      }
+      // Use load-balanced selection: prefer keys with fewer requests
+      const keyWithLoads = availableKeys.map(key => ({
+        key,
+        load: this.getRateLimitInfo(key.id).requestsInCurrentMinute,
+        remainingCapacity: (REQUESTS_PER_MINUTE - SAFETY_BUFFER) - this.getRateLimitInfo(key.id).requestsInCurrentMinute
+      }))
 
-      const selectedKey = availableKeys[this.roundRobinIndex]
+      // Sort by remaining capacity (descending) then by load (ascending)
+      keyWithLoads.sort((a, b) => {
+        if (a.remainingCapacity !== b.remainingCapacity) {
+          return b.remainingCapacity - a.remainingCapacity
+        }
+        return a.load - b.load
+      })
 
-      // Move to next key for the next request
-      this.roundRobinIndex = (this.roundRobinIndex + 1) % availableKeys.length
+      const selectedKey = keyWithLoads[0].key
+      console.log(`🎯 Load-balanced selection: ${selectedKey.name} (load: ${keyWithLoads[0].load}/${REQUESTS_PER_MINUTE - SAFETY_BUFFER}, remaining: ${keyWithLoads[0].remainingCapacity})`)
 
-      const nextKey = availableKeys[this.roundRobinIndex] || availableKeys[0]
-      console.log(`🔄 Round-robin: Selected ${selectedKey.name} (#${this.roundRobinIndex}/${availableKeys.length}) → Next will be: ${nextKey?.name}`)
       return selectedKey
     }
 
@@ -97,29 +131,56 @@ export class RateLimiter {
       }
     }
 
-    console.log(`⏳ All keys rate limited, returning soonest available: ${soonestKey?.name}`)
+    const waitTime = soonestTime - Date.now()
+    console.log(`⏳ All keys rate limited, returning soonest available: ${soonestKey?.name} (available in ${Math.max(0, waitTime)}ms)`)
     return soonestKey
   }
 
   /**
    * Get a balanced distribution of API keys for batch processing
+   * Optimally distributes requests to maximize throughput while respecting rate limits
    */
   getBalancedApiKeys(apiKeys: ApiKeyInfo[], batchSize: number): ApiKeyInfo[] {
     const validApiKeys = apiKeys.filter(key => key.isValid)
     if (validApiKeys.length === 0) return []
 
-    const availableKeys = validApiKeys.filter(key => this.canMakeRequest(key.id))
     const result: ApiKeyInfo[] = []
 
-    // Distribute batch among available keys
+    // Create a map of available capacity for each key
+    const keyCapacities = validApiKeys.map(key => {
+      const info = this.getRateLimitInfo(key.id)
+      const remainingCapacity = Math.max(0, (REQUESTS_PER_MINUTE - SAFETY_BUFFER) - info.requestsInCurrentMinute)
+      return {
+        key,
+        remainingCapacity,
+        assigned: 0
+      }
+    })
+
+    // Sort by remaining capacity (descending)
+    keyCapacities.sort((a, b) => b.remainingCapacity - a.remainingCapacity)
+
+    // Distribute requests optimally
     for (let i = 0; i < batchSize; i++) {
-      if (availableKeys.length > 0) {
-        const keyIndex = i % availableKeys.length
-        result.push(availableKeys[keyIndex])
+      // Find the key with the highest remaining capacity that hasn't been fully utilized
+      const availableKey = keyCapacities.find(kc => kc.assigned < kc.remainingCapacity)
+
+      if (availableKey) {
+        result.push(availableKey.key)
+        availableKey.assigned++
+      } else {
+        // If all keys are at capacity, use round-robin among all valid keys
+        const keyIndex = i % validApiKeys.length
+        result.push(validApiKeys[keyIndex])
       }
     }
 
-    console.log(`📊 Distributed ${batchSize} requests across ${availableKeys.length} available API keys`)
+    const distribution = keyCapacities
+      .filter(kc => kc.assigned > 0)
+      .map(kc => `${kc.key.name}:${kc.assigned}`)
+      .join(', ')
+
+    console.log(`📊 Optimally distributed ${batchSize} requests: ${distribution}`)
     return result
   }
 
@@ -129,7 +190,7 @@ export class RateLimiter {
   getWaitTimeUntilNextAvailable(apiKeys: ApiKeyInfo[]): number {
     const validApiKeys = apiKeys.filter(key => key.isValid)
     const now = Date.now()
-    let minWaitTime = 0
+    let minWaitTime = Infinity
 
     for (const apiKey of validApiKeys) {
       if (this.canMakeRequest(apiKey.id)) {
@@ -138,12 +199,40 @@ export class RateLimiter {
 
       const info = this.getRateLimitInfo(apiKey.id)
       const waitTime = Math.max(0, info.nextAvailableTime - now)
-      if (minWaitTime === 0 || waitTime < minWaitTime) {
+      if (waitTime < minWaitTime) {
         minWaitTime = waitTime
       }
     }
 
-    return minWaitTime
+    return minWaitTime === Infinity ? 0 : minWaitTime
+  }
+
+  /**
+   * Get detailed availability forecast for all API keys
+   */
+  getAvailabilityForecast(apiKeys: ApiKeyInfo[]): Array<{
+    key: ApiKeyInfo
+    currentLoad: number
+    remainingCapacity: number
+    nextAvailableTime: number
+    waitTimeMs: number
+  }> {
+    const validApiKeys = apiKeys.filter(key => key.isValid)
+    const now = Date.now()
+
+    return validApiKeys.map(key => {
+      const info = this.getRateLimitInfo(key.id)
+      const remainingCapacity = Math.max(0, (REQUESTS_PER_MINUTE - SAFETY_BUFFER) - info.requestsInCurrentMinute)
+      const waitTime = info.isLimited ? Math.max(0, info.nextAvailableTime - now) : 0
+
+      return {
+        key,
+        currentLoad: info.requestsInCurrentMinute,
+        remainingCapacity,
+        nextAvailableTime: info.nextAvailableTime,
+        waitTimeMs: waitTime
+      }
+    }).sort((a, b) => a.waitTimeMs - b.waitTimeMs) // Sort by availability
   }
 
   /**
@@ -179,7 +268,7 @@ export class RateLimiter {
    * Reset round-robin index to ensure fresh distribution when API keys change
    */
   resetRoundRobin(): void {
-    this.roundRobinIndex = 0
+    // no-op: round-robin index not used currently
     console.log('🔄 Reset round-robin index for fresh API key distribution')
   }
 
@@ -198,6 +287,26 @@ export class RateLimiter {
   }
 
   /**
+   * Calculate optimal batch size based on available API key capacity
+   */
+  getOptimalBatchSize(apiKeys: ApiKeyInfo[], maxBatchSize: number = 50): number {
+    const validApiKeys = apiKeys.filter(key => key.isValid)
+    if (validApiKeys.length === 0) return 0
+
+    // Calculate total available capacity across all keys
+    const totalCapacity = validApiKeys.reduce((sum, key) => {
+      const info = this.getRateLimitInfo(key.id)
+      const remainingCapacity = Math.max(0, (REQUESTS_PER_MINUTE - SAFETY_BUFFER) - info.requestsInCurrentMinute)
+      return sum + remainingCapacity
+    }, 0)
+
+    // Return the minimum of total capacity and max batch size
+    const optimalSize = Math.min(totalCapacity, maxBatchSize)
+    console.log(`🎯 Optimal batch size: ${optimalSize} (total capacity: ${totalCapacity}, max: ${maxBatchSize})`)
+    return optimalSize
+  }
+
+  /**
    * Get statistics for rate limiting
    */
   getStats(): {
@@ -205,16 +314,22 @@ export class RateLimiter {
     limitedApiKeys: number
     totalRequestsInCurrentWindow: number
     averageRequestsPerKey: number
+    totalCapacity: number
+    utilizationPercentage: number
   } {
     const apiKeyIds = Object.keys(this.rateLimitInfo)
     const limitedKeys = apiKeyIds.filter(id => this.rateLimitInfo[id].isLimited)
     const totalRequests = apiKeyIds.reduce((sum, id) => sum + this.rateLimitInfo[id].requestsInCurrentMinute, 0)
+    const totalCapacity = apiKeyIds.length * (REQUESTS_PER_MINUTE - SAFETY_BUFFER)
+    const utilizationPercentage = totalCapacity > 0 ? (totalRequests / totalCapacity) * 100 : 0
 
     return {
       totalApiKeys: apiKeyIds.length,
       limitedApiKeys: limitedKeys.length,
       totalRequestsInCurrentWindow: totalRequests,
-      averageRequestsPerKey: apiKeyIds.length > 0 ? totalRequests / apiKeyIds.length : 0
+      averageRequestsPerKey: apiKeyIds.length > 0 ? totalRequests / apiKeyIds.length : 0,
+      totalCapacity,
+      utilizationPercentage
     }
   }
 }

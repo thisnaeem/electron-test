@@ -375,14 +375,14 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
     // Check file count limit first
     const currentFileCount = files.length
-    if (currentFileCount >= 1000) {
-      alert('You have reached the maximum limit of 1000 files.')
+    if (currentFileCount >= 2000) {
+      alert('You have reached the maximum limit of 2000 files.')
       return
     }
 
-    if (currentFileCount + incomingFiles.length > 1000) {
-      const remainingSlots = 1000 - currentFileCount
-      alert(`You can only upload ${remainingSlots} more file${remainingSlots === 1 ? '' : 's'} to reach the 1000 file limit.`)
+    if (currentFileCount + incomingFiles.length > 2000) {
+      const remainingSlots = 2000 - currentFileCount
+      alert(`You can only upload ${remainingSlots} more file${remainingSlots === 1 ? '' : 's'} to reach the 2000 file limit.`)
       return
     }
 
@@ -490,8 +490,8 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
 
   const handleAddMoreImages = useCallback((): void => {
     // Check if we're at the file limit
-    if (files.length >= 1000) {
-      alert('You have reached the maximum limit of 1000 files.')
+    if (files.length >= 2000) {
+      alert('You have reached the maximum limit of 2000 files.')
       return
     }
 

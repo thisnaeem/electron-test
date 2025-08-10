@@ -15,23 +15,48 @@ import {
   removeApiKey,
   validateMultipleApiKey,
   incrementApiKeyUsage,
+  incrementOpenrouterApiKeyUsage,
   ApiKeyInfo
 } from '../store/slices/settingsSlice'
-import { rateLimiter } from '../utils/rateLimiter'
+// Rate limiting imports removed since logic was reverted
 import { compressImageForGemini, isImageWithinSizeLimit, getImageSize } from '../utils/imageCompression'
+import { OpenAIMetadataService } from '../services/OpenAIMetadataService'
+import { GroqMetadataService } from '../services/GroqMetadataService'
+import { OpenRouterMetadataService } from '../services/OpenRouterMetadataService'
+import { openrouterRateLimiter } from '../utils/openrouterRateLimiter'
+import { rateLimiter } from '../utils/rateLimiter'
 
 // Retry configuration - More aggressive retries, no fallback metadata
 const MAX_RETRIES = 10 // Increased to 10 for more persistent retries
 const RETRY_DELAY = 300 // Reduced to 300ms for faster retries
-// Dynamic parallel limit based on available API keys (minimum 5, maximum 15)
-const getOptimalParallelLimit = (apiKeyCount: number): number => Math.min(Math.max(apiKeyCount, 5), 15)
+// Conservative parallel limit to avoid rate limiting
+const getOptimalParallelLimit = (apiKeys: ApiKeyInfo[]): number => {
+  const validApiKeys = apiKeys.filter(key => key.isValid)
+  // Simple parallel limit based on available API keys
+  return Math.min(validApiKeys.length, 5) // Max 5 concurrent requests
+}
 
 // Helper function to wait
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
 
 export function GeminiProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const dispatch = useAppDispatch()
-  const { apiKey, isApiKeyValid, apiKeys, isValidatingAny } = useAppSelector(state => state.settings)
+  const {
+    apiKey,
+    isApiKeyValid,
+    apiKeys,
+    isValidatingAny,
+    openaiApiKey,
+    isOpenaiApiKeyValid,
+    openaiSelectedModel,
+    groqApiKey,
+    isGroqApiKeyValid,
+    openrouterApiKey,
+    isOpenrouterApiKeyValid,
+    openrouterApiKeys,
+    openrouterSelectedModel,
+    metadataProvider
+  } = useAppSelector(state => state.settings)
 
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
@@ -116,8 +141,7 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
         console.log(`📏 SVG converted image size: ${imageSizeKB}KB`)
       }
 
-      // Record API usage for rate limiting
-      rateLimiter.recordRequest(apiKeyInfo.id)
+      // Record API usage
       dispatch(incrementApiKeyUsage(apiKeyInfo.id))
 
       const genAI = new GoogleGenerativeAI(apiKeyInfo.key)
@@ -296,6 +320,14 @@ Respond with only the title, description, and keywords in the specified format.`
         }
       ]
 
+      // Add mandatory delay before API request to avoid rate limiting
+      const delayMs = 1000 + Math.random() * 2000 // 1-3 second delay
+      console.log(`⏳ Waiting ${delayMs.toFixed(0)}ms before API request for ${filename}`)
+      await wait(delayMs)
+
+      // Rate limiting removed
+
+      console.log(`🚀 Making API request for ${filename} with key: ${apiKeyInfo.name}`)
       const result = await model.generateContent(content)
       const response = result.response
       const text = response.text()
@@ -370,13 +402,19 @@ Respond with only the title, description, and keywords in the specified format.`
     }
   }, [apiKeys, dispatch])
 
-  const generateMetadata = useCallback(async (
+  const generateMetadataWithOpenAI = useCallback(async (
     input: ImageInput[],
     onMetadataGenerated?: (result: MetadataResult) => void,
     settings?: {
       titleWords: number;
+      titleMinWords?: number;
+      titleMaxWords?: number;
       keywordsCount: number;
+      keywordsMinCount?: number;
+      keywordsMaxCount?: number;
       descriptionWords: number;
+      descriptionMinWords?: number;
+      descriptionMaxWords?: number;
       keywordSettings?: {
         singleWord: boolean;
         doubleWord: boolean;
@@ -399,6 +437,634 @@ Respond with only the title, description, and keywords in the specified format.`
       }
     }
   ): Promise<MetadataResult[]> => {
+    if (!openaiApiKey || !isOpenaiApiKeyValid) {
+      throw new Error('OpenAI API key is not valid. Please check your API key in Settings.')
+    }
+
+    setIsLoading(true)
+    setError(null)
+    setGenerationStartTime(Date.now())
+    stopRequestedRef.current = false
+
+    const results: MetadataResult[] = []
+    const openaiService = new OpenAIMetadataService(openaiApiKey, openaiSelectedModel)
+
+    // Initialize processing progress
+    const initialProgress: ProcessingProgress = {
+      total: input.length,
+      completed: 0,
+      currentFilename: null,
+      currentApiKeyId: 'openai',
+      processingStats: {
+        'openai': {
+          processed: 0,
+          errors: 0,
+          lastUsed: Date.now()
+        }
+      }
+    }
+
+    setProcessingProgress(initialProgress)
+
+    try {
+      console.log(`🚀 Starting OpenAI metadata generation for ${input.length} images`)
+
+      for (let i = 0; i < input.length; i++) {
+        if (stopRequestedRef.current) {
+          console.log('🛑 Generation stopped by user')
+          break
+        }
+
+        const imageInput = input[i]
+
+        // Update progress
+        setProcessingProgress(prev => prev ? {
+          ...prev,
+          currentFilename: imageInput.filename,
+          currentApiKeyId: 'openai'
+        } : null)
+
+        try {
+          const result = await openaiService.generateMetadataForSingleImage(imageInput, settings)
+          results.push(result)
+
+          // Update progress
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            completed: prev.completed + 1,
+            processingStats: {
+              ...prev.processingStats,
+              'openai': {
+                ...prev.processingStats['openai'],
+                processed: prev.processingStats['openai'].processed + 1,
+                lastUsed: Date.now()
+              }
+            }
+          } : null)
+
+          // Call the callback if provided
+          if (onMetadataGenerated) {
+            onMetadataGenerated(result)
+          }
+
+        } catch (error) {
+          console.error(`❌ OpenAI generation failed for ${imageInput.filename}:`, error)
+
+          const failedResult: MetadataResult = {
+            filename: imageInput.filename,
+            title: '',
+            description: '',
+            keywords: [],
+            failed: true
+          }
+
+          results.push(failedResult)
+
+          // Update error stats
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            completed: prev.completed + 1,
+            processingStats: {
+              ...prev.processingStats,
+              'openai': {
+                ...prev.processingStats['openai'],
+                errors: prev.processingStats['openai'].errors + 1,
+                lastUsed: Date.now()
+              }
+            }
+          } : null)
+
+          if (onMetadataGenerated) {
+            onMetadataGenerated(failedResult)
+          }
+        }
+      }
+
+      console.log(`✅ OpenAI metadata generation completed. ${results.filter(r => !r.failed).length}/${results.length} successful`)
+
+      setIsLoading(false)
+      setError(null)
+
+      return results
+
+    } catch (error) {
+      console.error('❌ OpenAI metadata generation error:', error)
+      setIsLoading(false)
+      setError(error instanceof Error ? error.message : 'Failed to generate metadata with OpenAI')
+      throw error
+    } finally {
+      // Clear progress after a delay
+      setTimeout(() => setProcessingProgress(null), 2000)
+    }
+  }, [openaiApiKey, isOpenaiApiKeyValid])
+
+  const generateMetadataWithGroq = useCallback(async (
+    input: ImageInput[],
+    onMetadataGenerated?: (result: MetadataResult) => void,
+    settings?: {
+      titleWords: number;
+      titleMinWords?: number;
+      titleMaxWords?: number;
+      keywordsCount: number;
+      keywordsMinCount?: number;
+      keywordsMaxCount?: number;
+      descriptionWords: number;
+      descriptionMinWords?: number;
+      descriptionMaxWords?: number;
+      keywordSettings?: {
+        singleWord: boolean;
+        doubleWord: boolean;
+        mixed: boolean;
+      }
+      customization?: {
+        customPrompt: boolean;
+        customPromptText: string;
+        prohibitedWords: boolean;
+        prohibitedWordsList: string;
+        transparentBackground: boolean;
+        silhouette: boolean;
+      }
+      titleCustomization?: {
+        titleStyle: string;
+        customPrefix: boolean;
+        prefixText: string;
+        customPostfix: boolean;
+        postfixText: string;
+      }
+    }
+  ): Promise<MetadataResult[]> => {
+    if (!groqApiKey || !isGroqApiKeyValid) {
+      throw new Error('Groq API key is not valid. Please check your API key in Settings.')
+    }
+
+    setIsLoading(true)
+    setError(null)
+    setGenerationStartTime(Date.now())
+    stopRequestedRef.current = false
+
+    const results: MetadataResult[] = []
+    const groqService = new GroqMetadataService(groqApiKey)
+
+    // Initialize processing progress
+    const initialProgress: ProcessingProgress = {
+      total: input.length,
+      completed: 0,
+      currentFilename: null,
+      currentApiKeyId: 'groq',
+      processingStats: {
+        'groq': {
+          processed: 0,
+          errors: 0,
+          lastUsed: Date.now()
+        }
+      }
+    }
+
+    setProcessingProgress(initialProgress)
+
+    try {
+      console.log(`🚀 Starting Groq metadata generation for ${input.length} images`)
+
+      for (let i = 0; i < input.length; i++) {
+        if (stopRequestedRef.current) {
+          console.log('🛑 Generation stopped by user')
+          break
+        }
+
+        const imageInput = input[i]
+
+        // Update progress
+        setProcessingProgress(prev => prev ? {
+          ...prev,
+          currentFilename: imageInput.filename,
+          currentApiKeyId: 'groq'
+        } : null)
+
+        try {
+          const result = await groqService.generateMetadataForSingleImage(imageInput, settings)
+          results.push(result)
+
+          // Update progress
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            completed: prev.completed + 1,
+            processingStats: {
+              ...prev.processingStats,
+              'groq': {
+                ...prev.processingStats['groq'],
+                processed: prev.processingStats['groq'].processed + 1,
+                lastUsed: Date.now()
+              }
+            }
+          } : null)
+
+          // Call the callback if provided
+          if (onMetadataGenerated) {
+            onMetadataGenerated(result)
+          }
+
+        } catch (error) {
+          console.error(`❌ Groq generation failed for ${imageInput.filename}:`, error)
+
+          const failedResult: MetadataResult = {
+            filename: imageInput.filename,
+            title: '',
+            description: '',
+            keywords: [],
+            failed: true
+          }
+
+          results.push(failedResult)
+
+          // Update error stats
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            completed: prev.completed + 1,
+            processingStats: {
+              ...prev.processingStats,
+              'groq': {
+                ...prev.processingStats['groq'],
+                errors: prev.processingStats['groq'].errors + 1,
+                lastUsed: Date.now()
+              }
+            }
+          } : null)
+
+          if (onMetadataGenerated) {
+            onMetadataGenerated(failedResult)
+          }
+        }
+      }
+
+      console.log(`✅ Groq metadata generation completed. ${results.filter(r => !r.failed).length}/${results.length} successful`)
+
+      setIsLoading(false)
+      setError(null)
+
+      return results
+
+    } catch (error) {
+      console.error('❌ Groq metadata generation error:', error)
+      setIsLoading(false)
+      setError(error instanceof Error ? error.message : 'Failed to generate metadata with Groq')
+      throw error
+    } finally {
+      // Clear progress after a delay
+      setTimeout(() => setProcessingProgress(null), 2000)
+    }
+  }, [groqApiKey, isGroqApiKeyValid])
+
+  const generateMetadataWithOpenRouter = useCallback(async (
+    input: ImageInput[],
+    onMetadataGenerated?: (result: MetadataResult) => void,
+    settings?: {
+      titleWords: number;
+      titleMinWords?: number;
+      titleMaxWords?: number;
+      keywordsCount: number;
+      keywordsMinCount?: number;
+      keywordsMaxCount?: number;
+      descriptionWords: number;
+      descriptionMinWords?: number;
+      descriptionMaxWords?: number;
+      keywordSettings?: {
+        singleWord: boolean;
+        doubleWord: boolean;
+        mixed: boolean;
+      }
+      customization?: {
+        customPrompt: boolean;
+        customPromptText: string;
+        prohibitedWords: boolean;
+        prohibitedWordsList: string;
+        transparentBackground: boolean;
+        silhouette: boolean;
+      }
+      titleCustomization?: {
+        titleStyle: string;
+        customPrefix: boolean;
+        prefixText: string;
+        customPostfix: boolean;
+        postfixText: string;
+      }
+    }
+  ): Promise<MetadataResult[]> => {
+    if (!openrouterApiKey || !isOpenrouterApiKeyValid) {
+      throw new Error('OpenRouter API key is not valid. Please check your API key in Settings.')
+    }
+
+    setIsLoading(true)
+    setError(null)
+    setGenerationStartTime(Date.now())
+    stopRequestedRef.current = false
+
+    const results: MetadataResult[] = []
+
+    // Use multiple OpenRouter API keys if available, otherwise fall back to single key
+    const validOpenrouterKeys = openrouterApiKeys.filter(key => key.isValid)
+    const useMultipleKeys = validOpenrouterKeys.length > 0
+
+    let openrouterService: OpenRouterMetadataService
+
+    if (useMultipleKeys) {
+      console.log(`🚀 Using ${validOpenrouterKeys.length} OpenRouter API keys for round-robin distribution`)
+      openrouterService = new OpenRouterMetadataService(validOpenrouterKeys[0].key, openrouterSelectedModel)
+    } else {
+      console.log('🚀 Using single OpenRouter API key')
+      openrouterService = new OpenRouterMetadataService(openrouterApiKey, openrouterSelectedModel)
+    }
+
+    // Initialize processing progress
+    const initialProgress: ProcessingProgress = {
+      total: input.length,
+      completed: 0,
+      currentFilename: null,
+      currentApiKeyId: useMultipleKeys ? validOpenrouterKeys[0].id : 'openrouter',
+      processingStats: useMultipleKeys
+        ? validOpenrouterKeys.reduce((stats, key) => ({
+            ...stats,
+            [key.id]: {
+              processed: 0,
+              errors: 0,
+              lastUsed: Date.now()
+            }
+          }), {})
+        : {
+            'openrouter': {
+              processed: 0,
+              errors: 0,
+              lastUsed: Date.now()
+            }
+          }
+    }
+
+    setProcessingProgress(initialProgress)
+
+    try {
+      console.log(`🚀 Starting OpenRouter metadata generation for ${input.length} images`)
+
+      if (useMultipleKeys) {
+        console.log(`🔄 Using round-robin processing with ${validOpenrouterKeys.length} OpenRouter API keys`)
+        let currentKeyIndex = 0
+
+        // Process images sequentially with round-robin key selection
+        for (let i = 0; i < input.length; i++) {
+          if (stopRequestedRef.current) {
+            console.log('🛑 Generation stopped by user')
+            break
+          }
+
+          const imageInput = input[i]
+
+          // Get next available API key using round-robin
+          let currentKey = validOpenrouterKeys[currentKeyIndex]
+          let attempts = 0
+
+          // Find an available key (not rate limited)
+          while (!openrouterRateLimiter.canMakeRequest(currentKey.id, openrouterSelectedModel) && attempts < validOpenrouterKeys.length) {
+            currentKeyIndex = (currentKeyIndex + 1) % validOpenrouterKeys.length
+            currentKey = validOpenrouterKeys[currentKeyIndex]
+            attempts++
+          }
+
+          // If all keys are rate limited, wait for the current one
+          if (!openrouterRateLimiter.canMakeRequest(currentKey.id, openrouterSelectedModel)) {
+            console.log(`⏳ All OpenRouter keys rate limited, waiting for ${currentKey.name}...`)
+            const waitTime = openrouterRateLimiter.getWaitTimeUntilNextAvailable([currentKey], openrouterSelectedModel)
+            if (waitTime > 0) {
+              await wait(waitTime)
+            }
+          }
+
+          console.log(`📤 Using OpenRouter API key: ${currentKey.name} for ${imageInput.filename}`)
+
+          // Move to next key for next request (round-robin)
+          currentKeyIndex = (currentKeyIndex + 1) % validOpenrouterKeys.length
+
+          // Update progress
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            currentFilename: imageInput.filename,
+            currentApiKeyId: currentKey.id
+          } : null)
+
+          try {
+            // Record the request for rate limiting
+            openrouterRateLimiter.recordRequest(currentKey.id, openrouterSelectedModel)
+
+            // Update the service to use the current API key
+            openrouterService.updateApiKey(currentKey.key)
+
+            const result = await openrouterService.generateMetadataForSingleImage(imageInput, settings)
+            results.push(result)
+
+            // Update progress and API key usage
+            setProcessingProgress(prev => prev ? {
+              ...prev,
+              completed: prev.completed + 1,
+              processingStats: {
+                ...prev.processingStats,
+                [currentKey.id]: {
+                  ...prev.processingStats[currentKey.id],
+                  processed: prev.processingStats[currentKey.id].processed + 1,
+                  lastUsed: Date.now()
+                }
+              }
+            } : null)
+
+            // Update API key usage in Redux store
+            dispatch(incrementOpenrouterApiKeyUsage(currentKey.id))
+
+            // Call the callback if provided
+            if (onMetadataGenerated) {
+              onMetadataGenerated(result)
+            }
+
+            console.log(`✅ Successfully generated metadata for ${imageInput.filename} using ${currentKey.name}`)
+
+          } catch (error) {
+            console.error(`❌ OpenRouter generation failed for ${imageInput.filename}:`, error)
+
+            const failedResult: MetadataResult = {
+              filename: imageInput.filename,
+              title: '',
+              description: '',
+              keywords: [],
+              failed: true
+            }
+
+            results.push(failedResult)
+
+            // Update error stats
+            setProcessingProgress(prev => prev ? {
+              ...prev,
+              completed: prev.completed + 1,
+              processingStats: {
+                ...prev.processingStats,
+                [currentKey.id]: {
+                  ...prev.processingStats[currentKey.id],
+                  errors: prev.processingStats[currentKey.id].errors + 1,
+                  lastUsed: Date.now()
+                }
+              }
+            } : null)
+
+            if (onMetadataGenerated) {
+              onMetadataGenerated(failedResult)
+            }
+          }
+        }
+      } else {
+        // Single key processing (original logic)
+        console.log('🚀 Using single OpenRouter API key')
+
+        for (let i = 0; i < input.length; i++) {
+          if (stopRequestedRef.current) {
+            console.log('🛑 Generation stopped by user')
+            break
+          }
+
+          const imageInput = input[i]
+
+          // Check rate limiting for single key
+          if (!openrouterRateLimiter.canMakeRequest('openrouter', openrouterSelectedModel)) {
+            const waitTime = openrouterRateLimiter.getWaitTimeUntilNextAvailable([{ id: 'openrouter', key: '', isValid: true, isValidating: false, validationError: null, requestCount: 0, lastRequestTime: 0, name: 'OpenRouter' }], openrouterSelectedModel)
+            if (waitTime > 0) {
+              console.log(`⏳ OpenRouter rate limited, waiting ${waitTime}ms...`)
+              await wait(waitTime)
+            }
+          }
+
+          // Update progress
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            currentFilename: imageInput.filename,
+            currentApiKeyId: 'openrouter'
+          } : null)
+
+          try {
+            // Record the request for rate limiting
+            openrouterRateLimiter.recordRequest('openrouter', openrouterSelectedModel)
+
+            const result = await openrouterService.generateMetadataForSingleImage(imageInput, settings)
+            results.push(result)
+
+            // Update progress
+            setProcessingProgress(prev => prev ? {
+              ...prev,
+              completed: prev.completed + 1,
+              processingStats: {
+                ...prev.processingStats,
+                'openrouter': {
+                  ...prev.processingStats['openrouter'],
+                  processed: prev.processingStats['openrouter'].processed + 1,
+                  lastUsed: Date.now()
+                }
+              }
+            } : null)
+
+            // Call the callback if provided
+            if (onMetadataGenerated) {
+              onMetadataGenerated(result)
+            }
+
+          } catch (error) {
+            console.error(`❌ OpenRouter generation failed for ${imageInput.filename}:`, error)
+
+            const failedResult: MetadataResult = {
+              filename: imageInput.filename,
+              title: '',
+              description: '',
+              keywords: [],
+              failed: true
+            }
+
+            results.push(failedResult)
+
+            // Update error stats
+            setProcessingProgress(prev => prev ? {
+              ...prev,
+              completed: prev.completed + 1,
+              processingStats: {
+                ...prev.processingStats,
+                'openrouter': {
+                  ...prev.processingStats['openrouter'],
+                  errors: prev.processingStats['openrouter'].errors + 1,
+                  lastUsed: Date.now()
+                }
+              }
+            } : null)
+
+            if (onMetadataGenerated) {
+              onMetadataGenerated(failedResult)
+            }
+          }
+        }
+      }
+
+      console.log(`✅ OpenRouter metadata generation completed. ${results.filter(r => !r.failed).length}/${results.length} successful`)
+
+      setIsLoading(false)
+      setError(null)
+
+      return results
+
+    } catch (error) {
+      console.error('❌ OpenRouter metadata generation error:', error)
+      setIsLoading(false)
+      setError(error instanceof Error ? error.message : 'Failed to generate metadata with OpenRouter')
+      throw error
+    } finally {
+      // Clear progress after a delay
+      setTimeout(() => setProcessingProgress(null), 2000)
+    }
+  }, [openrouterApiKey, isOpenrouterApiKeyValid])
+
+  const generateMetadata = useCallback(async (
+    input: ImageInput[],
+    onMetadataGenerated?: (result: MetadataResult) => void,
+    settings?: {
+      titleWords: number;
+      titleMinWords?: number;
+      titleMaxWords?: number;
+      keywordsCount: number;
+      keywordsMinCount?: number;
+      keywordsMaxCount?: number;
+      descriptionWords: number;
+      descriptionMinWords?: number;
+      descriptionMaxWords?: number;
+      keywordSettings?: {
+        singleWord: boolean;
+        doubleWord: boolean;
+        mixed: boolean;
+      }
+      customization?: {
+        customPrompt: boolean;
+        customPromptText: string;
+        prohibitedWords: boolean;
+        prohibitedWordsList: string;
+        transparentBackground: boolean;
+        silhouette: boolean;
+      }
+      titleCustomization?: {
+        titleStyle: string;
+        customPrefix: boolean;
+        prefixText: string;
+        customPostfix: boolean;
+        postfixText: string;
+      }
+    }
+  ): Promise<MetadataResult[]> => {
+    // Check which provider to use
+    if (metadataProvider === 'openai') {
+      return generateMetadataWithOpenAI(input, onMetadataGenerated, settings)
+    } else if (metadataProvider === 'groq') {
+      return generateMetadataWithGroq(input, onMetadataGenerated, settings)
+    } else if (metadataProvider === 'openrouter') {
+      return generateMetadataWithOpenRouter(input, onMetadataGenerated, settings)
+    }
+
+    // Default to Gemini (existing logic)
     const validApiKeys = apiKeys.filter(key => key.isValid)
 
     if (validApiKeys.length === 0) {
@@ -445,11 +1111,10 @@ Respond with only the title, description, and keywords in the specified format.`
     })
 
     console.log(`🚀 Starting metadata generation with ${validApiKeys.length} API keys:`, validApiKeys.map(k => k.name))
-    console.log(`📊 Optimal parallel limit: ${getOptimalParallelLimit(validApiKeys.length)} (based on ${validApiKeys.length} keys)`)
+    const optimalParallelLimit = getOptimalParallelLimit(validApiKeys)
+    console.log(`📊 Optimal parallel limit: ${optimalParallelLimit} (based on ${validApiKeys.length} keys with current capacity)`)
 
-    // Reset round-robin for fresh distribution ensuring we start from the first key
-    rateLimiter.resetRoundRobin()
-    console.log(`🔄 Round-robin distribution reset - will cycle through: ${validApiKeys.map(k => k.name).join(' → ')}`)
+    console.log(`🚀 Starting metadata generation with ${validApiKeys.length} API keys:`, validApiKeys.map(k => k.name))
 
     setProcessingProgress(initialProgress)
 
@@ -471,7 +1136,7 @@ Respond with only the title, description, and keywords in the specified format.`
         const batch: Promise<void>[] = []
 
         // Create batch ensuring each request gets a different API key in round-robin order
-        const parallelLimit = getOptimalParallelLimit(validApiKeys.length)
+        const parallelLimit = optimalParallelLimit
 
         // Process images with pre-assigned API keys for round-robin distribution
         for (let i = 0; i < parallelLimit && currentIndex < input.length; i++) {
@@ -484,21 +1149,8 @@ Respond with only the title, description, and keywords in the specified format.`
           const imageIndex = currentIndex++
           const imageInput = input[imageIndex]
 
-          // Get next available API key using strict round-robin
-          const availableApiKey = rateLimiter.getNextAvailableApiKey(validApiKeys)
-
-          if (!availableApiKey) {
-            // Wait until an API key becomes available
-            const waitTime = rateLimiter.getWaitTimeUntilNextAvailable(validApiKeys)
-            if (waitTime > 0) {
-              console.log(`All API keys rate limited. Waiting ${waitTime}ms...`)
-              await wait(waitTime)
-              // Try again after waiting
-              i-- // Retry this slot
-              currentIndex-- // Reset index
-              continue
-            }
-          }
+          // Get next available API key using round-robin
+          const availableApiKey = validApiKeys[currentIndex % validApiKeys.length]
 
           if (availableApiKey) {
             console.log(`📤 Assigning ${imageInput.filename} to ${availableApiKey.name} (round-robin distribution)`)
@@ -516,20 +1168,12 @@ Respond with only the title, description, and keywords in the specified format.`
 
                 try {
                   // Get current API key (might change on retry)
-                  let currentApiKey = availableApiKey
+                  const currentApiKey = availableApiKey
 
-                  // If this is a retry, try to get a different API key
+                  // If this is a retry, wait before retrying
                   if (retryCount > 0) {
-                    const otherApiKeys = validApiKeys.filter(key => key.id !== currentApiKey.id)
-                    const nextApiKey = rateLimiter.getNextAvailableApiKey(otherApiKeys)
-                    if (nextApiKey) {
-                      currentApiKey = nextApiKey
-                      console.log(`🔄 Retry ${retryCount} for ${imageInput.filename} with ${nextApiKey.name}`)
-                    } else {
-                      // If no other API keys available, wait and use the same one
-                      console.log(`⏳ Retry ${retryCount} for ${imageInput.filename} - waiting before retry with ${currentApiKey.name}`)
-                      await wait(RETRY_DELAY * retryCount)
-                    }
+                    console.log(`⏳ Retry ${retryCount} for ${imageInput.filename} - waiting before retry with ${currentApiKey.name}`)
+                    await wait(RETRY_DELAY * retryCount)
                   }
 
                   // Update progress
@@ -607,10 +1251,10 @@ Respond with only the title, description, and keywords in the specified format.`
                   // If we've exhausted all retries, mark as failed (no fallback metadata)
                   if (retryCount > MAX_RETRIES) {
                     console.error(`❌ All retries exhausted for ${imageInput.filename} - marking as failed`)
-                    
+
                     // Don't add any result - let it remain undefined to indicate failure
                     // This will be filtered out later and the UI will show an error indicator
-                    
+
                     return
                   }
 
@@ -688,7 +1332,7 @@ Respond with only the title, description, and keywords in the specified format.`
       // Keep progress for a moment to show completion, then clear
       setTimeout(() => setProcessingProgress(null), 2000)
     }
-  }, [apiKeys, apiKey, isApiKeyValid, generateMetadataForSingleImage])
+  }, [apiKeys, apiKey, isApiKeyValid, generateMetadataForSingleImage, metadataProvider, generateMetadataWithOpenAI, generateMetadataWithGroq, generateMetadataWithOpenRouter])
 
   // API key management functions
   const handleAddApiKey = useCallback((key: string, name?: string) => {
@@ -696,7 +1340,6 @@ Respond with only the title, description, and keywords in the specified format.`
   }, [dispatch])
 
   const handleRemoveApiKey = useCallback((id: string) => {
-    rateLimiter.resetApiKeyLimits(id)
     dispatch(removeApiKey(id))
   }, [dispatch])
 
@@ -824,6 +1467,9 @@ Requirements:
         })
       }
 
+      // Rate limiting removed
+
+      console.log(`🚀 Making prompt generation API request with key: ${apiKeyToUse.name}`)
       const result = await model.generateContent(content)
       const response = result.response
       const text = response.text()
@@ -923,6 +1569,21 @@ Please improve it by:
 
 Return only the enhanced prompt, nothing else. Make it concise but highly detailed.`
 
+      // Add mandatory delay before API request to avoid rate limiting
+      const delayMs = 1000 + Math.random() * 2000 // 1-3 second delay
+      console.log(`⏳ Waiting ${delayMs.toFixed(0)}ms before prompt enhancement API request`)
+      await wait(delayMs)
+
+      // Double-check rate limiting before making request
+      if (!rateLimiter.canMakeRequest(apiKeyToUse.id)) {
+        const waitTime = rateLimiter.getWaitTimeUntilNextAvailable([apiKeyToUse])
+        if (waitTime > 0) {
+          console.log(`🚫 Rate limit check failed, waiting additional ${waitTime}ms`)
+          await wait(waitTime)
+        }
+      }
+
+      console.log(`🚀 Making prompt enhancement API request with key: ${apiKeyToUse.name}`)
       const result = await model.generateContent(enhancementPrompt)
       const response = result.response
       const enhancedText = response.text()
@@ -1074,6 +1735,28 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
         }
       }
 
+      // Add mandatory delay before API request to avoid rate limiting
+      const delayMs = 1000 + Math.random() * 2000 // 1-3 second delay
+      console.log(`⏳ Waiting ${delayMs.toFixed(0)}ms before chat API request`)
+      await wait(delayMs)
+
+      // Double-check rate limiting before making request
+      const apiKeyToUse = validApiKeys.length > 0 ? validApiKeys[0] : {
+        id: 'legacy',
+        key: apiKey,
+        isValid: isApiKeyValid,
+        name: 'Legacy API Key'
+      } as ApiKeyInfo
+
+      if (!rateLimiter.canMakeRequest(apiKeyToUse.id)) {
+        const waitTime = rateLimiter.getWaitTimeUntilNextAvailable([apiKeyToUse])
+        if (waitTime > 0) {
+          console.log(`🚫 Rate limit check failed, waiting additional ${waitTime}ms`)
+          await wait(waitTime)
+        }
+      }
+
+      console.log(`🚀 Making chat API request with key: ${apiKeyToUse.name}`)
       const result = await model.generateContent(content)
       const response = result.response
       const text = response.text()
@@ -1140,8 +1823,8 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
     processingProgress,
     generationStartTime,
 
-    // Rate limiting
-    rateLimitInfo: rateLimiter.getAllRateLimitInfo(),
+    // Rate limiting (basic support only)
+    rateLimitInfo: {},
 
     // API key management
     addApiKey: handleAddApiKey,

@@ -6,79 +6,17 @@ export interface ProcessedFileData {
   originalData?: string // For vector files
 }
 
-// Analyze frame content to determine if it has meaningful visual content
-const analyzeFrameContent = (ctx: CanvasRenderingContext2D, width: number, height: number): number => {
-  try {
-    const imageData = ctx.getImageData(0, 0, width, height)
-    const data = imageData.data
+// Removed complex frame analysis for faster processing
 
-    let totalBrightness = 0
-    let colorVariance = 0
-    let edgeCount = 0
-    const sampleSize = Math.min(data.length / 4, 10000) // Sample pixels for performance
-    const step = Math.floor((data.length / 4) / sampleSize)
-
-    const brightnesses: number[] = []
-
-    // Analyze brightness and color variance
-    for (let i = 0; i < data.length; i += step * 4) {
-      const r = data[i]
-      const g = data[i + 1]
-      const b = data[i + 2]
-
-      // Calculate brightness (luminance)
-      const brightness = (r * 0.299 + g * 0.587 + b * 0.114)
-      brightnesses.push(brightness)
-      totalBrightness += brightness
-    }
-
-    const avgBrightness = totalBrightness / brightnesses.length
-
-    // Calculate variance to detect uniform (black/white) frames
-    for (const brightness of brightnesses) {
-      colorVariance += Math.pow(brightness - avgBrightness, 2)
-    }
-    colorVariance = colorVariance / brightnesses.length
-
-    // Detect edges (simple edge detection)
-    const edgeThreshold = 30
-    for (let i = 0; i < brightnesses.length - 1; i++) {
-      if (Math.abs(brightnesses[i] - brightnesses[i + 1]) > edgeThreshold) {
-        edgeCount++
-      }
-    }
-
-    // Score the frame based on multiple factors
-    let score = 0
-
-    // Avoid too dark frames (likely black frames)
-    if (avgBrightness > 20 && avgBrightness < 235) {
-      score += 30
-    }
-
-    // Prefer frames with good color variance (not uniform)
-    if (colorVariance > 100) {
-      score += 40
-    }
-
-    // Prefer frames with edges (content detail)
-    const edgeRatio = edgeCount / brightnesses.length
-    if (edgeRatio > 0.1) {
-      score += 30
-    }
-
-    console.log(`Frame analysis: brightness=${avgBrightness.toFixed(1)}, variance=${colorVariance.toFixed(1)}, edges=${edgeCount}, score=${score}`)
-
-    return score
-  } catch (error) {
-    console.warn('Error analyzing frame content:', error)
-    return 50 // Default score if analysis fails
-  }
-}
-
-// Extract frame from video file using intelligent frame selection
+// Extract frame from video file optimized for low-end PCs
 export const extractVideoFrame = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
+    // Check file size - skip very large videos on low-end PCs
+    if (file.size > 200 * 1024 * 1024) { // 200MB limit
+      reject(new Error('Video file too large for processing'))
+      return
+    }
+
     const video = document.createElement('video')
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
@@ -88,21 +26,19 @@ export const extractVideoFrame = (file: File): Promise<string> => {
       return
     }
 
-    // Set video attributes for CSP compatibility
+    // Set video attributes for CSP compatibility and low-end PC optimization
     video.muted = true
     video.playsInline = true
-    video.preload = 'metadata'
+    video.preload = 'metadata' // Only load metadata, not full video
     video.autoplay = false
     video.controls = false
     video.style.display = 'none'
+    video.volume = 0 // Ensure no audio processing
 
     let frameExtracted = false
     let timeoutId: NodeJS.Timeout
-    let currentFrameIndex = 0
-    let bestFrame: { data: string; score: number } | null = null
 
-    // Define frame positions to check (as percentages of video duration)
-    const framePositions = [0.25, 0.5, 0.75, 0.1, 0.9, 0.33, 0.66] // Start with middle frames, then edges
+    // Extract single frame at 25% position for speed
 
     const cleanup = () => {
       if (timeoutId) clearTimeout(timeoutId)
@@ -114,135 +50,88 @@ export const extractVideoFrame = (file: File): Promise<string> => {
       }
     }
 
-    const setupCanvas = () => {
-      // Set canvas size to video dimensions (with max limits)
-      const maxSize = 800
-      let { videoWidth, videoHeight } = video
-
-      // Fallback dimensions if video dimensions are not available
-      if (!videoWidth || !videoHeight) {
-        videoWidth = 640
-        videoHeight = 480
-      }
-
-      if (videoWidth > videoHeight && videoWidth > maxSize) {
-        videoHeight = (videoHeight * maxSize) / videoWidth
-        videoWidth = maxSize
-      } else if (videoHeight > maxSize) {
-        videoWidth = (videoWidth * maxSize) / videoHeight
-        videoHeight = maxSize
-      }
-
-      canvas.width = videoWidth
-      canvas.height = videoHeight
-
-      return { videoWidth, videoHeight }
-    }
-
-    const analyzeCurrentFrame = (): { data: string; score: number } => {
-      const { videoWidth, videoHeight } = setupCanvas()
-
-      // Draw the video frame to canvas
-      ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
-
-      // Analyze frame content
-      const score = analyzeFrameContent(ctx, videoWidth, videoHeight)
-
-      // Convert to data URL
-      const frameData = canvas.toDataURL('image/jpeg', 0.8)
-
-      return { data: frameData, score }
-    }
-
-    const checkNextFrame = () => {
+    const extractFrame = () => {
       if (frameExtracted) return
 
-      if (currentFrameIndex >= framePositions.length) {
-        // We've checked all positions, return the best frame
-        frameExtracted = true
+      try {
+        // Set canvas size to video dimensions (with aggressive limits for low-end PCs)
+        const maxSize = 400 // Further reduced for low-end PCs
+        let { videoWidth, videoHeight } = video
 
-        if (bestFrame) {
-          console.log(`Selected best frame with score: ${bestFrame.score}`)
-          cleanup()
-          resolve(bestFrame.data)
-        } else {
-          // Fallback: return center frame even if not great
-          video.currentTime = video.duration / 2
-          setTimeout(() => {
-            try {
-              const fallbackFrame = analyzeCurrentFrame()
-              cleanup()
-              resolve(fallbackFrame.data)
-            } catch (error) {
-              cleanup()
-              reject(new Error(`Failed to extract fallback frame: ${error instanceof Error ? error.message : 'Unknown error'}`))
-            }
-          }, 100)
+        // Fallback dimensions if video dimensions are not available
+        if (!videoWidth || !videoHeight || videoWidth === 0 || videoHeight === 0) {
+          videoWidth = 400
+          videoHeight = 300
         }
-        return
-      }
 
-      // Move to next frame position
-      const duration = video.duration
-      if (duration > 0) {
-        const position = framePositions[currentFrameIndex]
-        video.currentTime = duration * position
-        console.log(`Checking frame at ${(position * 100).toFixed(1)}% (${video.currentTime.toFixed(2)}s)`)
-      } else {
-        // If duration is not available, try fixed times
-        video.currentTime = Math.min(currentFrameIndex + 1, 10)
-      }
+        // Ensure reasonable dimensions
+        if (videoWidth > videoHeight && videoWidth > maxSize) {
+          videoHeight = Math.floor((videoHeight * maxSize) / videoWidth)
+          videoWidth = maxSize
+        } else if (videoHeight > maxSize) {
+          videoWidth = Math.floor((videoWidth * maxSize) / videoHeight)
+          videoHeight = maxSize
+        }
 
-      currentFrameIndex++
+        // Minimum size check
+        if (videoWidth < 100) videoWidth = 100
+        if (videoHeight < 100) videoHeight = 100
+
+        canvas.width = videoWidth
+        canvas.height = videoHeight
+
+        // Clear canvas first
+        ctx.clearRect(0, 0, videoWidth, videoHeight)
+
+        // Draw the video frame to canvas with error handling
+        ctx.drawImage(video, 0, 0, videoWidth, videoHeight)
+
+        // Convert to data URL with lower quality for speed and smaller memory footprint
+        const frameData = canvas.toDataURL('image/jpeg', 0.6)
+
+        frameExtracted = true
+        cleanup()
+        resolve(frameData)
+      } catch (error) {
+        cleanup()
+        reject(new Error(`Frame extraction failed: ${error instanceof Error ? error.message : 'Unknown error'}`))
+      }
     }
 
     // Event handlers
     video.onloadedmetadata = () => {
-      console.log(`Video loaded: ${video.duration}s, ${video.videoWidth}x${video.videoHeight}`)
-
-      // Start checking frames
-      checkNextFrame()
+      // Seek to 25% of video duration for a good representative frame
+      const seekTime = video.duration > 0 ? video.duration * 0.25 : 1
+      video.currentTime = seekTime
     }
 
     video.onseeked = () => {
-      console.log(`Video seeked to: ${video.currentTime}s`)
-
-      // Small delay to ensure frame is ready, then analyze
+      // Small delay to ensure frame is ready, then extract
       setTimeout(() => {
-        if (frameExtracted) return
-
-        try {
-          const frameResult = analyzeCurrentFrame()
-
-          // Keep track of the best frame so far
-          if (!bestFrame || frameResult.score > bestFrame.score) {
-            bestFrame = frameResult
-            console.log(`New best frame found with score: ${frameResult.score}`)
-          }
-
-          // If we found a very good frame (score > 80), use it immediately
-          if (frameResult.score > 80) {
-            frameExtracted = true
+        if (!frameExtracted) {
+          try {
+            extractFrame()
+          } catch (error) {
             cleanup()
-            resolve(frameResult.data)
-            return
+            reject(new Error(`Failed to extract frame: ${error instanceof Error ? error.message : 'Unknown error'}`))
           }
-
-          // Otherwise, continue checking more frames
-          setTimeout(checkNextFrame, 50)
-        } catch (error) {
-          console.error('Error analyzing frame:', error)
-          // Continue to next frame on error
-          setTimeout(checkNextFrame, 50)
         }
-      }, 100)
+      }, 50)
     }
 
     video.onloadeddata = () => {
-      console.log('Video data loaded')
-      // Fallback: if seeking doesn't work, start frame checking
-      if (!frameExtracted && currentFrameIndex === 0) {
-        setTimeout(checkNextFrame, 200)
+      // Fallback: if seeking doesn't work, extract current frame
+      if (!frameExtracted) {
+        setTimeout(() => {
+          if (!frameExtracted) {
+            try {
+              extractFrame()
+            } catch (error) {
+              cleanup()
+              reject(new Error(`Failed to extract fallback frame: ${error instanceof Error ? error.message : 'Unknown error'}`))
+            }
+          }
+        }, 100)
       }
     }
 
@@ -252,19 +141,13 @@ export const extractVideoFrame = (file: File): Promise<string> => {
       reject(new Error('Failed to load video for frame extraction'))
     }
 
-    // Set timeout to prevent hanging
+    // Set aggressive timeout to prevent hanging on low-end PCs
     timeoutId = setTimeout(() => {
       if (!frameExtracted) {
-        if (bestFrame) {
-          console.log('Timeout reached, using best frame found')
-          cleanup()
-          resolve(bestFrame.data)
-        } else {
-          cleanup()
-          reject(new Error('Video frame extraction timeout'))
-        }
+        cleanup()
+        reject(new Error('Video frame extraction timeout - file may be corrupted or too complex'))
       }
-    }, 30000) // Increased timeout for multiple frame analysis
+    }, 3000) // Very short timeout for low-end PCs
 
     // Add video to DOM temporarily for processing
     document.body.appendChild(video)
@@ -422,37 +305,13 @@ export const convertSvgToImage = (svgContent: string): Promise<string> => {
       }
     }
 
-    // Set timeout to prevent hanging
+    // Set timeout to prevent hanging - reduced for faster processing
     const timeoutId = setTimeout(() => {
       if (blobUrl) {
-        console.warn('SVG conversion timeout, creating fallback...')
         cleanup()
-
-        // Create fallback on timeout
-        try {
-          canvas.width = 400
-          canvas.height = 400
-
-          ctx.fillStyle = '#f3f4f6'
-          ctx.fillRect(0, 0, 400, 400)
-
-          ctx.fillStyle = '#6b7280'
-          ctx.fillRect(80, 60, 240, 280)
-
-          ctx.fillStyle = '#374151'
-          ctx.font = 'bold 24px Arial'
-          ctx.textAlign = 'center'
-          ctx.fillText('SVG', 200, 220)
-          ctx.font = '16px Arial'
-          ctx.fillText('Timeout', 200, 250)
-
-          const timeoutImageData = canvas.toDataURL('image/png', 1.0)
-          resolve(timeoutImageData)
-        } catch {
-          reject(new Error('SVG conversion timeout and fallback failed'))
-        }
+        reject(new Error('SVG conversion timeout'))
       }
-    }, 10000)
+    }, 3000) // Reduced timeout from 10s to 3s
 
     try {
       // Clean and validate SVG content
@@ -617,24 +476,43 @@ export const validateConvertedImageData = (imageData: string, originalFilename: 
   })
 }
 
-// Main file processor
+// Main file processor optimized for low-end PCs
 export const processMediaFile = async (file: File): Promise<ProcessedFileData> => {
   const fileType = file.type
   const fileName = file.name.toLowerCase()
 
   try {
-    // Handle images (existing logic)
+    // Handle images with memory optimization
     if (fileType.startsWith('image/')) {
+      // For very large images on low-end PCs, use lower quality reading
       const imageData = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader()
+        
+        // Set timeout to prevent hanging on corrupted files
+        const timeout = setTimeout(() => {
+          reader.abort()
+          reject(new Error('Image read timeout - file may be corrupted'))
+        }, 10000) // 10 second timeout
+        
         reader.onload = (e) => {
+          clearTimeout(timeout)
           if (e.target?.result) {
             resolve(e.target.result as string)
           } else {
             reject(new Error('Failed to read image'))
           }
         }
-        reader.onerror = () => reject(new Error('File read error'))
+        
+        reader.onerror = () => {
+          clearTimeout(timeout)
+          reject(new Error('File read error'))
+        }
+        
+        reader.onabort = () => {
+          clearTimeout(timeout)
+          reject(new Error('File read aborted'))
+        }
+        
         reader.readAsDataURL(file)
       })
 
@@ -644,91 +522,100 @@ export const processMediaFile = async (file: File): Promise<ProcessedFileData> =
       }
     }
 
-    // Handle videos
+    // Handle videos with timeout protection
     if (fileType.startsWith('video/')) {
-      const frameData = await extractVideoFrame(file)
-      return {
-        previewData: frameData,
-        fileType: 'video'
+      try {
+        const frameData = await Promise.race([
+          extractVideoFrame(file),
+          new Promise<string>((_, reject) => 
+            setTimeout(() => reject(new Error('Video processing timeout')), 8000)
+          )
+        ])
+        return {
+          previewData: frameData,
+          fileType: 'video'
+        }
+      } catch (videoError) {
+        console.warn(`Video processing failed for ${file.name}, creating fallback`)
+        // Create a simple video placeholder instead of failing
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        
+        if (ctx) {
+          canvas.width = 400
+          canvas.height = 300
+          
+          // Create video placeholder
+          ctx.fillStyle = '#1f2937'
+          ctx.fillRect(0, 0, 400, 300)
+          
+          // Play button
+          ctx.fillStyle = '#ffffff'
+          ctx.beginPath()
+          ctx.moveTo(160, 120)
+          ctx.lineTo(160, 180)
+          ctx.lineTo(220, 150)
+          ctx.closePath()
+          ctx.fill()
+          
+          // Video text
+          ctx.fillStyle = '#9ca3af'
+          ctx.font = '16px Arial'
+          ctx.textAlign = 'center'
+          ctx.fillText('Video File', 200, 220)
+          ctx.fillText('Preview Unavailable', 200, 240)
+          
+          const fallbackData = canvas.toDataURL('image/jpeg', 0.8)
+          return {
+            previewData: fallbackData,
+            fileType: 'video'
+          }
+        }
+        
+        throw videoError
       }
     }
 
-    // Handle SVG
+    // Handle SVG with enhanced error handling for low-end PCs
     if (fileType === 'image/svg+xml' || fileName.endsWith('.svg')) {
       console.log(`🎨 Processing SVG file: ${file.name}`)
 
-      const svgContent = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          if (e.target?.result) {
-            resolve(e.target.result as string)
-          } else {
-            reject(new Error('Failed to read SVG'))
-          }
-        }
-        reader.onerror = () => reject(new Error('SVG read error'))
-        reader.readAsText(file)
-      })
-
       try {
-        const previewData = await convertSvgToImage(svgContent)
-
-        // Validate the converted image
-        const isValid = await validateConvertedImageData(previewData, file.name)
-
-        if (!isValid) {
-          console.warn(`⚠️ SVG conversion validation failed for ${file.name}, using fallback`)
-          // Create a simple fallback image for invalid SVG conversions
-          const canvas = document.createElement('canvas')
-          const ctx = canvas.getContext('2d')
-
-          if (ctx) {
-            canvas.width = 400
-            canvas.height = 400
-
-            // Create fallback SVG icon
-            ctx.fillStyle = '#f3f4f6'
-            ctx.fillRect(0, 0, 400, 400)
-
-            ctx.fillStyle = '#6b7280'
-            ctx.fillRect(80, 60, 240, 280)
-
-            ctx.fillStyle = '#9ca3af'
-            ctx.beginPath()
-            ctx.moveTo(260, 60)
-            ctx.lineTo(320, 120)
-            ctx.lineTo(260, 120)
-            ctx.closePath()
-            ctx.fill()
-
-            ctx.fillStyle = '#374151'
-            ctx.font = 'bold 24px Arial'
-            ctx.textAlign = 'center'
-            ctx.fillText('SVG', 200, 200)
-            ctx.font = '16px Arial'
-            ctx.fillText('Conversion Failed', 200, 230)
-            ctx.fillText('Using Fallback', 200, 250)
-
-            const fallbackImageData = canvas.toDataURL('image/png', 1.0)
-
-            return {
-              previewData: fallbackImageData,
-              fileType: 'vector',
-              originalData: svgContent
+        const svgContent = await Promise.race([
+          new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = (e) => {
+              if (e.target?.result) {
+                resolve(e.target.result as string)
+              } else {
+                reject(new Error('Failed to read SVG'))
+              }
             }
-          }
-        }
+            reader.onerror = () => reject(new Error('SVG read error'))
+            reader.readAsText(file)
+          }),
+          new Promise<string>((_, reject) => 
+            setTimeout(() => reject(new Error('SVG read timeout')), 5000)
+          )
+        ])
 
-        console.log(`✅ SVG successfully converted and validated: ${file.name}`)
+        const previewData = await Promise.race([
+          convertSvgToImage(svgContent),
+          new Promise<string>((_, reject) => 
+            setTimeout(() => reject(new Error('SVG conversion timeout')), 4000)
+          )
+        ])
+
+        console.log(`✅ SVG successfully converted: ${file.name}`)
         return {
           previewData,
           fileType: 'vector',
           originalData: svgContent
         }
       } catch (svgError) {
-        console.error(`❌ SVG conversion failed for ${file.name}:`, svgError)
+        console.warn(`⚠️ SVG processing failed for ${file.name}, creating simple fallback`)
 
-        // Create a fallback image for failed SVG conversion
+        // Create a simple fallback image for failed SVG conversion
         const canvas = document.createElement('canvas')
         const ctx = canvas.getContext('2d')
 
@@ -736,31 +623,29 @@ export const processMediaFile = async (file: File): Promise<ProcessedFileData> =
           throw new Error(`Failed to process SVG ${file.name} and could not create fallback`)
         }
 
-        canvas.width = 400
-        canvas.height = 400
+        canvas.width = 300 // Smaller for low-end PCs
+        canvas.height = 300
 
-        // Create fallback error image
-        ctx.fillStyle = '#fee2e2'
-        ctx.fillRect(0, 0, 400, 400)
+        // Simple SVG icon
+        ctx.fillStyle = '#f3f4f6'
+        ctx.fillRect(0, 0, 300, 300)
 
-        ctx.fillStyle = '#dc2626'
-        ctx.fillRect(80, 60, 240, 280)
+        ctx.fillStyle = '#6b7280'
+        ctx.fillRect(60, 45, 180, 210)
 
         ctx.fillStyle = '#374151'
-        ctx.font = 'bold 20px Arial'
+        ctx.font = 'bold 18px Arial'
         ctx.textAlign = 'center'
-        ctx.fillText('SVG', 200, 190)
-        ctx.font = '16px Arial'
-        ctx.fillText('Processing Error', 200, 220)
-        ctx.font = '12px Arial'
-        ctx.fillText('File may be corrupted', 200, 240)
+        ctx.fillText('SVG', 150, 160)
+        ctx.font = '14px Arial'
+        ctx.fillText('Vector File', 150, 180)
 
-        const errorImageData = canvas.toDataURL('image/png', 1.0)
+        const fallbackImageData = canvas.toDataURL('image/jpeg', 0.8) // Use JPEG for smaller size
 
         return {
-          previewData: errorImageData,
+          previewData: fallbackImageData,
           fileType: 'vector',
-          originalData: svgContent
+          originalData: svgError instanceof Error ? svgError.message : 'SVG processing failed'
         }
       }
     }

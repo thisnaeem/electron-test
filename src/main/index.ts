@@ -8,6 +8,46 @@ import fs from 'fs'
 import path from 'path'
 import keyAuthMainService from './keyauth'
 
+// Enhanced error logging setup
+electronLog.transports.file.level = 'debug'
+electronLog.transports.console.level = 'debug'
+
+// Create logs directory
+const logsDir = path.join(app.getPath('userData'), 'logs')
+if (!fs.existsSync(logsDir)) {
+  fs.mkdirSync(logsDir, { recursive: true })
+}
+
+// Setup error logging
+const logError = (error: any, context: string) => {
+  const errorMessage = `[${context}] ${error instanceof Error ? error.message : JSON.stringify(error)}`
+  console.error(errorMessage)
+  electronLog.error(errorMessage)
+  
+  // Write to a separate error log file
+  const errorLogPath = path.join(logsDir, 'startup-errors.log')
+  const timestamp = new Date().toISOString()
+  const logEntry = `${timestamp} - ${errorMessage}\n`
+  
+  try {
+    fs.appendFileSync(errorLogPath, logEntry)
+  } catch (writeError) {
+    console.error('Failed to write to error log:', writeError)
+  }
+}
+
+// Global error handlers
+process.on('uncaughtException', (error) => {
+  logError(error, 'UNCAUGHT_EXCEPTION')
+  // Don't exit immediately, try to show error dialog
+  dialog.showErrorBox('Unexpected Error', `An unexpected error occurred: ${error.message}`)
+})
+
+process.on('unhandledRejection', (reason, promise) => {
+  logError(reason, 'UNHANDLED_REJECTION')
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+})
+
 
 export function getAutoUpdater(): AppUpdater {
   const { autoUpdater } = electronUpdater
@@ -115,104 +155,180 @@ autoUpdater.on('update-downloaded', (info) => {
 
 
 function createLicenseWindow(): void {
-  // Create the license window
-  licenseWindow = new BrowserWindow({
-    width: 500,
-    height: 650,
-    resizable: false,
-    show: false,
-    autoHideMenuBar: true,
-    frame: true,
-    center: true,
-    icon: join(__dirname, '../../resources/app-logo.png'),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: true
+  try {
+    console.log('Creating license window...')
+    
+    // Create the license window
+    licenseWindow = new BrowserWindow({
+      width: 500,
+      height: 650,
+      resizable: false,
+      show: false,
+      autoHideMenuBar: true,
+      frame: true,
+      center: true,
+      icon: join(__dirname, '../../resources/app-logo.png'),
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        webSecurity: true,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+
+    // Add timeout for window loading
+    const showTimeout = setTimeout(() => {
+      if (licenseWindow && !licenseWindow.isDestroyed()) {
+        console.log('License window taking too long to load, showing anyway')
+        licenseWindow.show()
+      }
+    }, 10000) // 10 second timeout
+
+    licenseWindow.on('ready-to-show', () => {
+      clearTimeout(showTimeout)
+      console.log('License window ready to show')
+      licenseWindow?.show()
+    })
+
+    // Handle window close - quit app
+    licenseWindow.on('close', () => {
+      clearTimeout(showTimeout)
+      app.quit()
+    })
+
+    licenseWindow.on('closed', () => {
+      clearTimeout(showTimeout)
+      licenseWindow = null
+    })
+
+    licenseWindow.webContents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url)
+      return { action: 'deny' }
+    })
+
+    // Add error handling for page load
+    licenseWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+      logError(`License window failed to load: ${errorCode} - ${errorDescription}`, 'LICENSE_WINDOW_LOAD')
+    })
+
+    // Load the license screen
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      licenseWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/license.html')
+        .catch(error => logError(error, 'LICENSE_WINDOW_URL_LOAD'))
+    } else {
+      licenseWindow.loadFile(join(__dirname, '../renderer/license.html'))
+        .catch(error => logError(error, 'LICENSE_WINDOW_FILE_LOAD'))
     }
-  })
 
-  licenseWindow.on('ready-to-show', () => {
-    licenseWindow?.show()
-  })
-
-  // Handle window close - quit app
-  licenseWindow.on('close', () => {
-    app.quit()
-  })
-
-  licenseWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // Load the license screen
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    licenseWindow.loadURL(process.env['ELECTRON_RENDERER_URL'] + '/license.html')
-  } else {
-    licenseWindow.loadFile(join(__dirname, '../renderer/license.html'))
+    console.log('License window created successfully')
+  } catch (error) {
+    logError(error, 'LICENSE_WINDOW_CREATION')
+    throw error
   }
 }
 
 function createMainWindow(): void {
-  // Create the main browser window
-  mainWindow = new BrowserWindow({
-    width: 1100,
-    height: 700,
-    minWidth: 800,  // Minimum width to prevent UI from breaking
-    minHeight: 600, // Minimum height to ensure proper layout
-    show: false,
-    autoHideMenuBar: true,
-    frame: true, // Use default title bar
-    icon: join(__dirname, '../../resources/app-logo.png'),
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false,
-      webSecurity: true
+  try {
+    console.log('Creating main window...')
+    
+    // Create the main browser window
+    mainWindow = new BrowserWindow({
+      width: 1100,
+      height: 700,
+      minWidth: 800,  // Minimum width to prevent UI from breaking
+      minHeight: 600, // Minimum height to ensure proper layout
+      show: false,
+      autoHideMenuBar: true,
+      frame: true, // Use default title bar
+      icon: join(__dirname, '../../resources/app-logo.png'),
+      webPreferences: {
+        preload: join(__dirname, '../preload/index.js'),
+        sandbox: false,
+        webSecurity: true,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    })
+
+    // Add timeout for window loading
+    const showTimeout = setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        console.log('Main window taking too long to load, showing anyway')
+        mainWindow.show()
+      }
+    }, 15000) // 15 second timeout
+
+    mainWindow.on('ready-to-show', () => {
+      clearTimeout(showTimeout)
+      console.log('Main window ready to show')
+      mainWindow?.show()
+    })
+
+    // Handle window close - quit app normally
+    mainWindow.on('close', () => {
+      clearTimeout(showTimeout)
+      app.quit()
+    })
+
+    mainWindow.on('closed', () => {
+      clearTimeout(showTimeout)
+      mainWindow = null
+    })
+
+    mainWindow.webContents.setWindowOpenHandler((details) => {
+      shell.openExternal(details.url)
+      return { action: 'deny' }
+    })
+
+    // Add error handling for page load
+    mainWindow.webContents.on('did-fail-load', (_, errorCode, errorDescription) => {
+      logError(`Main window failed to load: ${errorCode} - ${errorDescription}`, 'MAIN_WINDOW_LOAD')
+    })
+
+    // HMR for renderer base on electron-vite cli.
+    // Load the remote URL for development or the local html file for production.
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+        .catch(error => logError(error, 'MAIN_WINDOW_URL_LOAD'))
+    } else {
+      mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+        .catch(error => logError(error, 'MAIN_WINDOW_FILE_LOAD'))
     }
-  })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-  })
+    // Emit maximize/unmaximize events for renderer state sync
+    mainWindow.on('maximize', () => {
+      mainWindow?.webContents.send('window-maximized')
+    })
+    mainWindow.on('unmaximize', () => {
+      mainWindow?.webContents.send('window-unmaximized')
+    })
 
-  // Handle window close - quit app normally
-  mainWindow.on('close', () => {
-    app.quit()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
-
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    console.log('Main window created successfully')
+  } catch (error) {
+    logError(error, 'MAIN_WINDOW_CREATION')
+    throw error
   }
-
-  // Emit maximize/unmaximize events for renderer state sync
-  mainWindow.on('maximize', () => {
-    mainWindow?.webContents.send('window-maximized')
-  })
-  mainWindow.on('unmaximize', () => {
-    mainWindow?.webContents.send('window-unmaximized')
-  })
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('CSV Gen Pro')
+  try {
+    console.log('App is ready, starting initialization...')
+    
+    // Set app user model id for windows
+    electronApp.setAppUserModelId('CSVGen Pro')
 
-  // Set app icon for taskbar
-  if (process.platform === 'win32') {
-    app.setAppUserModelId('CSV Gen Pro')
+    // Set app icon for taskbar
+    if (process.platform === 'win32') {
+      app.setAppUserModelId('CSVGen Pro')
+    }
+
+    console.log('App user model ID set successfully')
+  } catch (error) {
+    logError(error, 'APP_INITIALIZATION')
   }
 
 
@@ -609,6 +725,10 @@ app.whenReady().then(async () => {
     return true
   })
 
+  ipcMain.handle('keyauth-is-offline-mode', () => {
+    return keyAuthMainService.isOfflineMode()
+  })
+
   // Handle successful authentication from license window
   ipcMain.on('auth-success', (_, userInfo) => {
     console.log('Authentication successful:', userInfo)
@@ -626,15 +746,32 @@ app.whenReady().then(async () => {
 
 
 
-  // Initialize KeyAuth and show license window
+  // Initialize KeyAuth and show license window with better error handling
   try {
+    console.log('Attempting to initialize KeyAuth...')
     await keyAuthMainService.initialize()
-    console.log('KeyAuth initialized, showing license window')
-    createLicenseWindow()
+    console.log('KeyAuth initialized successfully, showing license window')
   } catch (error) {
-    console.error('Failed to initialize KeyAuth:', error)
-    // Still show license window to allow user to try authentication
+    logError(error, 'KEYAUTH_INITIALIZATION')
+    console.log('KeyAuth initialization failed, continuing without it')
+  }
+
+  // Always show license window, but with different behavior based on KeyAuth status
+  try {
     createLicenseWindow()
+    console.log('License window created successfully')
+  } catch (error) {
+    logError(error, 'LICENSE_WINDOW_CREATION')
+    // If license window fails, show main window directly as fallback
+    console.log('License window failed, showing main window as fallback')
+    try {
+      createMainWindow()
+      isAuthenticated = true // Skip auth requirement as fallback
+    } catch (mainWindowError) {
+      logError(mainWindowError, 'MAIN_WINDOW_FALLBACK')
+      // Last resort - show error dialog
+      dialog.showErrorBox('Startup Error', 'Failed to create application window. Please check the logs and try again.')
+    }
   }
 
 

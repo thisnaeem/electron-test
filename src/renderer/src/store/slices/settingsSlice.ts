@@ -1,6 +1,10 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit'
 import { GoogleGenerativeAI } from '@google/generative-ai'
+import { apiKeyValidationService } from '../../services/ApiKeyValidationService'
+import { validateGeminiApiKey } from '../../utils/simpleApiKeyValidator'
 import Together from 'together-ai'
+import OpenAI from 'openai'
+import Groq from 'groq-sdk'
 
 export interface ApiKeyInfo {
   id: string
@@ -29,6 +33,33 @@ interface SettingsState {
   isTogetherApiKeyValid: boolean
   isValidatingTogetherApiKey: boolean
   togetherApiKeyValidationError: string | null
+
+  // OpenAI API key
+  openaiApiKey: string
+  isOpenaiApiKeyValid: boolean
+  isValidatingOpenaiApiKey: boolean
+  openaiApiKeyValidationError: string | null
+  openaiSelectedModel: string
+
+  // Groq API key
+  groqApiKey: string
+  isGroqApiKeyValid: boolean
+  isValidatingGroqApiKey: boolean
+  groqApiKeyValidationError: string | null
+
+  // OpenRouter API key (legacy single key)
+  openrouterApiKey: string
+  isOpenrouterApiKeyValid: boolean
+  isValidatingOpenrouterApiKey: boolean
+  openrouterApiKeyValidationError: string | null
+  openrouterSelectedModel: string
+
+  // Multiple OpenRouter API keys
+  openrouterApiKeys: ApiKeyInfo[]
+  isValidatingAnyOpenrouter: boolean
+
+  // Metadata generation provider selection
+  metadataProvider: 'gemini' | 'openai' | 'groq' | 'openrouter'
 
   // Theme settings
   isDarkMode: boolean
@@ -75,6 +106,24 @@ interface SettingsState {
       customPostfix: boolean
       postfixText: string
     }
+    platformOptions?: {
+      freepik?: {
+        isAiGenerated: boolean
+        aiModel?: string
+      }
+      "123rf"?: {
+        country: string
+      }
+      canva?: {
+        artistName: string
+      }
+      dreamstime?: {
+        isAiGenerated: boolean
+        isFree: boolean
+        isEditorial: boolean
+      }
+    }
+
   }
 }
 
@@ -107,6 +156,34 @@ const saveApiKeysToStorage = (apiKeys: ApiKeyInfo[]): void => {
   }
 }
 
+// Helper functions for OpenRouter API keys
+const loadOpenrouterApiKeysFromStorage = (): ApiKeyInfo[] => {
+  try {
+    const stored = localStorage.getItem('openrouterApiKeys')
+    console.log('📱 Loading OpenRouter API keys from localStorage:', stored)
+    if (!stored) {
+      console.log('📱 No OpenRouter API keys found in localStorage')
+      return []
+    }
+    const parsed = JSON.parse(stored)
+    console.log('📱 Parsed OpenRouter API keys:', parsed.length, 'keys found')
+    return Array.isArray(parsed) ? parsed : []
+  } catch (error) {
+    console.error('❌ Error loading OpenRouter API keys from localStorage:', error)
+    return []
+  }
+}
+
+const saveOpenrouterApiKeysToStorage = (apiKeys: ApiKeyInfo[]): void => {
+  try {
+    const serialized = JSON.stringify(apiKeys)
+    localStorage.setItem('openrouterApiKeys', serialized)
+    console.log('💾 Saved OpenRouter API keys to localStorage:', apiKeys.length, 'keys')
+  } catch (error) {
+    console.error('❌ Error saving OpenRouter API keys to localStorage:', error)
+  }
+}
+
 const initialState: SettingsState = {
   // Legacy fields
   apiKey: localStorage.getItem('geminiApiKey') || '',
@@ -124,6 +201,33 @@ const initialState: SettingsState = {
   isValidatingTogetherApiKey: false,
   togetherApiKeyValidationError: null,
 
+  // OpenAI API key
+  openaiApiKey: localStorage.getItem('openaiApiKey') || '',
+  isOpenaiApiKeyValid: localStorage.getItem('openaiApiKeyValid') === 'true',
+  isValidatingOpenaiApiKey: false,
+  openaiApiKeyValidationError: null,
+  openaiSelectedModel: localStorage.getItem('openaiSelectedModel') || 'gpt-4o-mini',
+
+  // Groq API key
+  groqApiKey: localStorage.getItem('groqApiKey') || '',
+  isGroqApiKeyValid: localStorage.getItem('groqApiKeyValid') === 'true',
+  isValidatingGroqApiKey: false,
+  groqApiKeyValidationError: null,
+
+  // OpenRouter API key (legacy)
+  openrouterApiKey: localStorage.getItem('openrouterApiKey') || '',
+  isOpenrouterApiKeyValid: localStorage.getItem('openrouterApiKeyValid') === 'true',
+  isValidatingOpenrouterApiKey: false,
+  openrouterApiKeyValidationError: null,
+  openrouterSelectedModel: localStorage.getItem('openrouterSelectedModel') || 'google/gemini-2.0-flash-exp:free',
+
+  // Multiple OpenRouter API keys
+  openrouterApiKeys: loadOpenrouterApiKeysFromStorage(),
+  isValidatingAnyOpenrouter: false,
+
+  // Metadata generation provider selection
+  metadataProvider: (localStorage.getItem('metadataProvider') as 'gemini' | 'openai' | 'groq' | 'openrouter') || 'gemini',
+
   // Theme settings
   isDarkMode: localStorage.getItem('darkMode') === 'true',
   themePreference: (localStorage.getItem('themePreference') as 'light' | 'dark' | 'system') || 'system',
@@ -137,7 +241,7 @@ const initialState: SettingsState = {
   // Auto-download settings
   autoDownloadCsv: localStorage.getItem('autoDownloadCsv') === 'true', // Default to false unless explicitly enabled
 
-    // Generation settings - load from localStorage with proper defaults
+  // Generation settings - load from localStorage with proper defaults
   generationSettings: (() => {
     try {
       const savedTitleWords = localStorage.getItem('generationTitleWords')
@@ -147,6 +251,7 @@ const initialState: SettingsState = {
       const savedKeywordSettings = localStorage.getItem('generationKeywordSettings')
       const savedCustomization = localStorage.getItem('generationCustomization')
       const savedTitleCustomization = localStorage.getItem('generationTitleCustomization')
+      const savedPlatformOptions = localStorage.getItem('generationPlatformOptions')
 
       console.log('🔧 Loading generation settings from localStorage:', {
         savedTitleWords,
@@ -155,7 +260,8 @@ const initialState: SettingsState = {
         savedPlatforms,
         savedKeywordSettings,
         savedCustomization,
-        savedTitleCustomization
+        savedTitleCustomization,
+        savedPlatformOptions
       })
 
       let platforms: string[] = []
@@ -238,6 +344,50 @@ const initialState: SettingsState = {
         }
       }
 
+      let platformOptions = {
+        freepik: {
+          isAiGenerated: false,
+          aiModel: 'Midjourney 6'
+        },
+        "123rf": {
+          country: 'US'
+        },
+        canva: {
+          artistName: 'Your Artist Name'
+        },
+        dreamstime: {
+          isAiGenerated: false,
+          isFree: false,
+          isEditorial: false
+        }
+      }
+      if (savedPlatformOptions) {
+        try {
+          const parsed = JSON.parse(savedPlatformOptions)
+          if (parsed && typeof parsed === 'object') {
+            platformOptions = {
+              freepik: {
+                isAiGenerated: parsed.freepik?.isAiGenerated ?? false,
+                aiModel: parsed.freepik?.aiModel ?? 'Midjourney 6'
+              },
+              "123rf": {
+                country: parsed["123rf"]?.country ?? 'US'
+              },
+              canva: {
+                artistName: parsed.canva?.artistName ?? 'Your Artist Name'
+              },
+              dreamstime: {
+                isAiGenerated: parsed.dreamstime?.isAiGenerated ?? false,
+                isFree: parsed.dreamstime?.isFree ?? false,
+                isEditorial: parsed.dreamstime?.isEditorial ?? false
+              }
+            }
+          }
+        } catch {
+          // Use defaults
+        }
+      }
+
       return {
         titleWords: savedTitleWords ? Math.max(5, Math.min(20, parseInt(savedTitleWords))) : 15,
         titleMinWords: 8,
@@ -251,7 +401,8 @@ const initialState: SettingsState = {
         platforms: platforms.length > 0 ? platforms : ['freepik'], // Default to Freepik
         keywordSettings,
         customization,
-        titleCustomization
+        titleCustomization,
+        platformOptions
       }
     } catch (error) {
       console.error('❌ Error loading generation settings from localStorage:', error)
@@ -285,6 +436,23 @@ const initialState: SettingsState = {
           prefixText: '',
           customPostfix: false,
           postfixText: ''
+        },
+        platformOptions: {
+          freepik: {
+            isAiGenerated: false,
+            aiModel: 'Midjourney 6'
+          },
+          "123rf": {
+            country: 'US'
+          },
+          canva: {
+            artistName: 'Your Artist Name'
+          },
+          dreamstime: {
+            isAiGenerated: false,
+            isFree: false,
+            isEditorial: false
+          }
         }
       }
     }
@@ -362,47 +530,52 @@ export const validateApiKey = createAsyncThunk(
 export const validateMultipleApiKey = createAsyncThunk(
   'settings/validateMultipleApiKey',
   async ({ id, key }: { id: string; key: string }, { rejectWithValue }) => {
-    if (!key) return rejectWithValue('API key is required')
+    console.log(`🚀 Starting validation for API key ${id}`)
 
     try {
-      const genAI = new GoogleGenerativeAI(key)
-      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+      // Try the simple validator first for faster results
+      console.log(`🔍 Using simple validator for key ${id}`)
+      const simpleResult = await validateGeminiApiKey(key)
 
-      // Create a small test image (1x1 pixel base64 encoded PNG)
-      const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
-
-      // Perform real validation with actual image analysis like in production
-      const testPrompt = 'Analyze this test image and respond with: "Test successful"'
-
-      const content = [
-        testPrompt,
-        {
-          inlineData: {
-            mimeType: 'image/png',
-            data: testImageBase64
-          }
+      if (simpleResult.isValid) {
+        console.log(`✅ API key ${id} validation successful with ${simpleResult.modelUsed || 'unknown model'}`)
+        return {
+          id,
+          isValid: true,
+          modelUsed: simpleResult.modelUsed,
+          timestamp: Date.now()
         }
-      ]
+      } else {
+        console.log(`❌ API key ${id} simple validation failed: ${simpleResult.error}`)
 
-      console.log(`🧪 Testing API key ${id} with real Gemini request...`)
-      const result = await model.generateContent(content)
-      const response = result.response
-      const text = response.text()
+        // Try the comprehensive validation service as fallback
+        console.log(`🔄 Trying comprehensive validator for key ${id}`)
+        const comprehensiveResult = await apiKeyValidationService.validateApiKey(key)
 
-      if (!text || text.trim().length === 0) {
-        throw new Error('API key validation failed: Empty response from Gemini')
+        if (comprehensiveResult.isValid) {
+          console.log(`✅ API key ${id} comprehensive validation successful`)
+          return {
+            id,
+            isValid: true,
+            modelUsed: comprehensiveResult.modelUsed,
+            timestamp: comprehensiveResult.timestamp
+          }
+        } else {
+          console.log(`❌ API key ${id} comprehensive validation also failed: ${comprehensiveResult.error}`)
+          return rejectWithValue({
+            id,
+            error: comprehensiveResult.error || simpleResult.error || 'Validation failed',
+            timestamp: Date.now()
+          })
+        }
       }
-
-      console.log(`✅ API key ${id} validation successful: ${text.substring(0, 50)}...`)
-      return { id, isValid: true }
-
     } catch (error) {
-      console.error(`❌ API key validation error for ${id}:`, error)
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error'
+      console.error(`💥 API key ${id} validation threw error:`, errorMessage)
       return rejectWithValue({
         id,
-        error: error instanceof Error
-          ? `Validation failed: ${error.message}`
-          : 'Validation failed. Check your API key and internet connection.'
+        error: errorMessage,
+        timestamp: Date.now()
       })
     }
   }
@@ -444,6 +617,236 @@ export const validateTogetherApiKey = createAsyncThunk(
           ? `Validation failed: ${error.message}`
           : 'Validation failed. Check your Together API key and internet connection.'
       )
+    }
+  }
+)
+
+export const validateOpenaiApiKey = createAsyncThunk(
+  'settings/validateOpenaiApiKey',
+  async (key: string, { rejectWithValue }) => {
+    if (!key) return rejectWithValue('OpenAI API key is required')
+
+    try {
+      const openai = new OpenAI({ apiKey: key, dangerouslyAllowBrowser: true })
+
+      // Test the API key with a simple vision request
+      console.log('🧪 Testing OpenAI API key...')
+
+      // Create a small test image (1x1 pixel base64 encoded PNG)
+      const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analyze this test image and respond with: 'Test successful'" },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${testImageBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 10
+      })
+
+      if (!response.choices || response.choices.length === 0 || !response.choices[0].message?.content) {
+        throw new Error('API key validation failed: No response from OpenAI')
+      }
+
+      console.log('✅ OpenAI API key validation successful')
+
+      // Store in localStorage for persistence
+      localStorage.setItem('openaiApiKey', key)
+      localStorage.setItem('openaiApiKeyValid', 'true')
+
+      return true
+    } catch (error) {
+      console.error('❌ OpenAI API key validation error:', error)
+      localStorage.setItem('openaiApiKeyValid', 'false')
+      return rejectWithValue(
+        error instanceof Error
+          ? `Validation failed: ${error.message}`
+          : 'Validation failed. Check your OpenAI API key and internet connection.'
+      )
+    }
+  }
+)
+
+export const validateGroqApiKey = createAsyncThunk(
+  'settings/validateGroqApiKey',
+  async (key: string, { rejectWithValue }) => {
+    if (!key) return rejectWithValue('Groq API key is required')
+
+    try {
+      const groq = new Groq({ apiKey: key, dangerouslyAllowBrowser: true })
+
+      // Test the API key with the vision model that we'll actually use
+      console.log('🧪 Testing Groq API key with vision model...')
+
+      // Create a small test image (2x2 pixels base64 encoded PNG)
+      const testImageBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVQIHWP8//8/AzYwOjqaYdeuXQAAVQYNAOp6WjsAAAAASUVORK5CYII='
+
+      const response = await groq.chat.completions.create({
+        model: "llava-v1.5-7b-4096-preview",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Analyze this test image and respond with: 'Test successful'"
+              },
+              {
+                type: "image_url",
+                image_url: {
+                  url: `data:image/png;base64,${testImageBase64}`
+                }
+              }
+            ]
+          }
+        ],
+        max_tokens: 10,
+        temperature: 0
+      })
+
+      if (!response.choices || response.choices.length === 0 || !response.choices[0].message?.content) {
+        throw new Error('API key validation failed: No response from Groq')
+      }
+
+      console.log('✅ Groq API key validation successful')
+
+      // Store in localStorage for persistence
+      localStorage.setItem('groqApiKey', key)
+      localStorage.setItem('groqApiKeyValid', 'true')
+
+      return true
+    } catch (error) {
+      console.error('❌ Groq API key validation error:', error)
+      localStorage.setItem('groqApiKeyValid', 'false')
+      return rejectWithValue(
+        error instanceof Error
+          ? `Validation failed: ${error.message}`
+          : 'Validation failed. Check your Groq API key and internet connection.'
+      )
+    }
+  }
+)
+
+export const validateOpenrouterApiKey = createAsyncThunk(
+  'settings/validateOpenrouterApiKey',
+  async (key: string, { rejectWithValue }) => {
+    if (!key) return rejectWithValue('OpenRouter API key is required')
+
+    try {
+      const openrouter = new OpenAI({ 
+        apiKey: key, 
+        baseURL: 'https://openrouter.ai/api/v1',
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: {
+          'HTTP-Referer': 'https://csvgen-pro.com',
+          'X-Title': 'CSVGen Pro'
+        }
+      })
+
+      // Test the API key with a simple text request first
+      console.log('🧪 Testing OpenRouter API key...')
+      
+      const response = await openrouter.chat.completions.create({
+        model: "meta-llama/llama-3.2-3b-instruct:free",
+        messages: [
+          {
+            role: "user",
+            content: "Respond with exactly: 'Test successful'"
+          }
+        ],
+        max_tokens: 10
+      })
+
+      if (!response.choices || response.choices.length === 0 || !response.choices[0].message?.content) {
+        throw new Error('API key validation failed: No response from OpenRouter')
+      }
+
+      console.log('✅ OpenRouter API key validation successful')
+
+      // Store in localStorage for persistence
+      localStorage.setItem('openrouterApiKey', key)
+      localStorage.setItem('openrouterApiKeyValid', 'true')
+
+      return true
+    } catch (error) {
+      console.error('❌ OpenRouter API key validation error:', error)
+      localStorage.setItem('openrouterApiKeyValid', 'false')
+      return rejectWithValue(
+        error instanceof Error
+          ? `Validation failed: ${error.message}`
+          : 'Validation failed. Check your OpenRouter API key and internet connection.'
+      )
+    }
+  }
+)
+
+// Multiple OpenRouter API key validation
+export const validateMultipleOpenrouterApiKey = createAsyncThunk(
+  'settings/validateMultipleOpenrouterApiKey',
+  async ({ id, key, selectedModel }: { id: string; key: string; selectedModel: string }, { rejectWithValue }) => {
+    console.log(`🚀 Starting OpenRouter validation for API key ${id}`)
+
+    try {
+      const openrouter = new OpenAI({ 
+        apiKey: key, 
+        baseURL: 'https://openrouter.ai/api/v1',
+        dangerouslyAllowBrowser: true,
+        defaultHeaders: {
+          'HTTP-Referer': 'https://csvgen-pro.com',
+          'X-Title': 'CSVGen Pro'
+        }
+      })
+
+      console.log(`🔍 Testing OpenRouter API key ${id} with model ${selectedModel}`)
+      
+      const response = await openrouter.chat.completions.create({
+        model: selectedModel,
+        messages: [
+          {
+            role: "user",
+            content: "Respond with exactly: 'API key validation successful'"
+          }
+        ],
+        max_tokens: 20,
+        temperature: 0.1
+      })
+
+      const content = response.choices[0]?.message?.content?.trim()
+      
+      if (content && content.length > 0) {
+        console.log(`✅ OpenRouter API key ${id} validation successful`)
+        return {
+          id,
+          isValid: true,
+          modelUsed: selectedModel,
+          timestamp: Date.now()
+        }
+      } else {
+        console.log(`❌ OpenRouter API key ${id} validation failed: Empty response`)
+        return rejectWithValue({
+          id,
+          error: 'Empty response from OpenRouter API',
+          timestamp: Date.now()
+        })
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown validation error'
+      console.error(`💥 OpenRouter API key ${id} validation threw error:`, errorMessage)
+      return rejectWithValue({
+        id,
+        error: errorMessage,
+        timestamp: Date.now()
+      })
     }
   }
 )
@@ -514,14 +917,142 @@ const settingsSlice = createSlice({
       }
     },
 
+    // Multiple OpenRouter API key actions
+    addOpenrouterApiKey: (state, action: PayloadAction<{ key: string; name?: string; isValid?: boolean }>) => {
+      const id = `openrouter-key-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const newKey: ApiKeyInfo = {
+        id,
+        key: action.payload.key,
+        isValid: action.payload.isValid ?? false,
+        isValidating: false,
+        validationError: null,
+        requestCount: 0,
+        lastRequestTime: 0,
+        name: action.payload.name || `OpenRouter Key ${state.openrouterApiKeys.length + 1}`
+      }
+      state.openrouterApiKeys.push(newKey)
+      saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+    },
+
+    removeOpenrouterApiKey: (state, action: PayloadAction<string>) => {
+      state.openrouterApiKeys = state.openrouterApiKeys.filter(key => key.id !== action.payload)
+      saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+    },
+
+    updateOpenrouterApiKeyName: (state, action: PayloadAction<{ id: string; name: string }>) => {
+      const key = state.openrouterApiKeys.find(k => k.id === action.payload.id)
+      if (key) {
+        key.name = action.payload.name
+        saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+      }
+    },
+
+    incrementOpenrouterApiKeyUsage: (state, action: PayloadAction<string>) => {
+      const key = state.openrouterApiKeys.find(k => k.id === action.payload)
+      if (key) {
+        key.requestCount++
+        key.lastRequestTime = Date.now()
+        saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+      }
+    },
+
+    resetOpenrouterApiKeyUsage: (state, action: PayloadAction<string>) => {
+      const key = state.openrouterApiKeys.find(k => k.id === action.payload)
+      if (key) {
+        key.requestCount = 0
+        saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+      }
+    },
+
+    clearOpenrouterApiKeyError: (state, action: PayloadAction<string>) => {
+      const key = state.openrouterApiKeys.find(k => k.id === action.payload)
+      if (key) {
+        key.validationError = null
+      }
+    },
+
     // Together API key actions
     setTogetherApiKey: (state, action: PayloadAction<string>) => {
       state.togetherApiKey = action.payload
       localStorage.setItem('togetherApiKey', action.payload)
+      
+      // Reset validation state when key is changed or cleared
+      if (!action.payload.trim()) {
+        state.isTogetherApiKeyValid = false
+        state.togetherApiKeyValidationError = null
+        state.isValidatingTogetherApiKey = false
+      }
     },
 
     clearTogetherValidationError: (state) => {
       state.togetherApiKeyValidationError = null
+    },
+
+    // OpenAI API key actions
+    setOpenaiApiKey: (state, action: PayloadAction<string>) => {
+      state.openaiApiKey = action.payload
+      localStorage.setItem('openaiApiKey', action.payload)
+      
+      // Reset validation state when key is changed or cleared
+      if (!action.payload.trim()) {
+        state.isOpenaiApiKeyValid = false
+        state.openaiApiKeyValidationError = null
+        state.isValidatingOpenaiApiKey = false
+      }
+    },
+
+    clearOpenaiValidationError: (state) => {
+      state.openaiApiKeyValidationError = null
+    },
+
+    setOpenaiSelectedModel: (state, action: PayloadAction<string>) => {
+      state.openaiSelectedModel = action.payload
+      localStorage.setItem('openaiSelectedModel', action.payload)
+    },
+
+    // Groq API key actions
+    setGroqApiKey: (state, action: PayloadAction<string>) => {
+      state.groqApiKey = action.payload
+      localStorage.setItem('groqApiKey', action.payload)
+      
+      // Reset validation state when key is changed or cleared
+      if (!action.payload.trim()) {
+        state.isGroqApiKeyValid = false
+        state.groqApiKeyValidationError = null
+        state.isValidatingGroqApiKey = false
+      }
+    },
+
+    clearGroqValidationError: (state) => {
+      state.groqApiKeyValidationError = null
+    },
+
+    // OpenRouter API key actions
+    setOpenrouterApiKey: (state, action: PayloadAction<string>) => {
+      state.openrouterApiKey = action.payload
+      localStorage.setItem('openrouterApiKey', action.payload)
+      
+      // Reset validation state when key is changed or cleared
+      if (!action.payload.trim()) {
+        state.isOpenrouterApiKeyValid = false
+        state.openrouterApiKeyValidationError = null
+        state.isValidatingOpenrouterApiKey = false
+      }
+    },
+
+    clearOpenrouterValidationError: (state) => {
+      state.openrouterApiKeyValidationError = null
+    },
+
+    setOpenrouterSelectedModel: (state, action: PayloadAction<string>) => {
+      state.openrouterSelectedModel = action.payload
+      localStorage.setItem('openrouterSelectedModel', action.payload)
+    },
+
+    // Metadata provider selection
+    setMetadataProvider: (state, action: PayloadAction<'gemini' | 'openai' | 'groq' | 'openrouter'>) => {
+      state.metadataProvider = action.payload
+      localStorage.setItem('metadataProvider', action.payload)
     },
 
     // Theme actions
@@ -583,10 +1114,18 @@ const settingsSlice = createSlice({
 
     // Helper to check if onboarding should be completed (5+ valid API keys)
     checkOnboardingCompletion: (state) => {
-      const validApiKeys = state.apiKeys.filter(key => key.isValid).length
-      if (validApiKeys >= 5 && !state.hasCompletedOnboarding) {
+      // Use the validation service to check access
+      const accessResult = apiKeyValidationService.checkGeneratorAccess(state.apiKeys)
+
+      if (accessResult.hasAccess && !state.hasCompletedOnboarding) {
         state.hasCompletedOnboarding = true
         localStorage.setItem('hasCompletedOnboarding', 'true')
+        console.log(`✅ Onboarding completed with ${accessResult.validKeyCount} valid API keys`)
+      } else if (!accessResult.hasAccess && state.hasCompletedOnboarding) {
+        // Reset onboarding if user no longer has enough valid keys
+        state.hasCompletedOnboarding = false
+        localStorage.setItem('hasCompletedOnboarding', 'false')
+        console.log(`❌ Onboarding reset - only ${accessResult.validKeyCount} valid API keys`)
       }
     },
 
@@ -612,7 +1151,7 @@ const settingsSlice = createSlice({
       console.log('- localStorage generationPlatforms:', localStorage.getItem('generationPlatforms'))
     },
 
-        // Generation settings actions
+    // Generation settings actions
     updateGenerationSettings: (state, action: PayloadAction<{
       titleWords?: number
       titleMinWords?: number
@@ -644,38 +1183,58 @@ const settingsSlice = createSlice({
         customPostfix: boolean
         postfixText: string
       }
+      platformOptions?: {
+        freepik?: {
+          isAiGenerated: boolean
+          aiModel?: string
+        }
+        "123rf"?: {
+          country: string
+        }
+        canva?: {
+          artistName: string
+        }
+        dreamstime?: {
+          isAiGenerated: boolean
+          isFree: boolean
+          isEditorial: boolean
+        }
+      }
+
     }>) => {
       // Validate and clamp values to allowed ranges
       const titleWords = action.payload.titleWords !== undefined ? Math.max(5, Math.min(20, action.payload.titleWords)) : state.generationSettings.titleWords
       const titleMinWords = action.payload.titleMinWords !== undefined ? Math.max(5, Math.min(20, action.payload.titleMinWords)) : state.generationSettings.titleMinWords
       const titleMaxWords = action.payload.titleMaxWords !== undefined ? Math.max(5, Math.min(20, action.payload.titleMaxWords)) : state.generationSettings.titleMaxWords
-      
+
       const keywordsCount = action.payload.keywordsCount !== undefined ? Math.max(10, Math.min(50, action.payload.keywordsCount)) : state.generationSettings.keywordsCount
       const keywordsMinCount = action.payload.keywordsMinCount !== undefined ? Math.max(10, Math.min(50, action.payload.keywordsMinCount)) : state.generationSettings.keywordsMinCount
       const keywordsMaxCount = action.payload.keywordsMaxCount !== undefined ? Math.max(10, Math.min(50, action.payload.keywordsMaxCount)) : state.generationSettings.keywordsMaxCount
-      
+
       const descriptionWords = action.payload.descriptionWords !== undefined ? Math.max(5, Math.min(50, action.payload.descriptionWords)) : state.generationSettings.descriptionWords
       const descriptionMinWords = action.payload.descriptionMinWords !== undefined ? Math.max(5, Math.min(50, action.payload.descriptionMinWords)) : state.generationSettings.descriptionMinWords
       const descriptionMaxWords = action.payload.descriptionMaxWords !== undefined ? Math.max(5, Math.min(50, action.payload.descriptionMaxWords)) : state.generationSettings.descriptionMaxWords
-      
+
       const platforms = action.payload.platforms || state.generationSettings.platforms
       const keywordSettings = action.payload.keywordSettings || state.generationSettings.keywordSettings
       const customization = action.payload.customization || state.generationSettings.customization
       const titleCustomization = action.payload.titleCustomization || state.generationSettings.titleCustomization
+      const platformOptions = action.payload.platformOptions || state.generationSettings.platformOptions
 
-      console.log('💾 Saving generation settings:', { 
+
+      console.log('💾 Saving generation settings:', {
         titleWords, titleMinWords, titleMaxWords,
         keywordsCount, keywordsMinCount, keywordsMaxCount,
         descriptionWords, descriptionMinWords, descriptionMaxWords,
-        platforms, keywordSettings, customization, titleCustomization 
+        platforms, keywordSettings, customization, titleCustomization, platformOptions
       })
 
       // Update Redux state
-      state.generationSettings = { 
+      state.generationSettings = {
         titleWords, titleMinWords, titleMaxWords,
         keywordsCount, keywordsMinCount, keywordsMaxCount,
         descriptionWords, descriptionMinWords, descriptionMaxWords,
-        platforms, keywordSettings, customization, titleCustomization 
+        platforms, keywordSettings, customization, titleCustomization, platformOptions
       }
 
       // Save to localStorage for persistence
@@ -698,6 +1257,9 @@ const settingsSlice = createSlice({
         }
         if (titleCustomization) {
           localStorage.setItem('generationTitleCustomization', JSON.stringify(titleCustomization))
+        }
+        if (platformOptions) {
+          localStorage.setItem('generationPlatformOptions', JSON.stringify(platformOptions))
         }
         console.log('✅ Generation settings saved to localStorage successfully')
       } catch (error) {
@@ -743,11 +1305,12 @@ const settingsSlice = createSlice({
         state.isValidatingAny = state.apiKeys.some(k => k.isValidating)
         saveApiKeysToStorage(state.apiKeys)
 
-        // Check if onboarding should be completed (5+ valid keys)
-        const validApiKeys = state.apiKeys.filter(k => k.isValid).length
-        if (validApiKeys >= 5 && !state.hasCompletedOnboarding) {
+        // Check if onboarding should be completed using validation service
+        const accessResult = apiKeyValidationService.checkGeneratorAccess(state.apiKeys)
+        if (accessResult.hasAccess && !state.hasCompletedOnboarding) {
           state.hasCompletedOnboarding = true
           localStorage.setItem('hasCompletedOnboarding', 'true')
+          console.log(`✅ Onboarding completed with ${accessResult.validKeyCount} valid API keys`)
         }
       })
       .addCase(validateMultipleApiKey.rejected, (state, action) => {
@@ -779,6 +1342,89 @@ const settingsSlice = createSlice({
         state.isTogetherApiKeyValid = false
         state.togetherApiKeyValidationError = action.payload as string
       })
+
+      // OpenAI API key validation
+      .addCase(validateOpenaiApiKey.pending, (state) => {
+        state.isValidatingOpenaiApiKey = true
+        state.openaiApiKeyValidationError = null
+      })
+      .addCase(validateOpenaiApiKey.fulfilled, (state) => {
+        state.isValidatingOpenaiApiKey = false
+        state.isOpenaiApiKeyValid = true
+        state.openaiApiKeyValidationError = null
+      })
+      .addCase(validateOpenaiApiKey.rejected, (state, action) => {
+        state.isValidatingOpenaiApiKey = false
+        state.isOpenaiApiKeyValid = false
+        state.openaiApiKeyValidationError = action.payload as string
+      })
+
+      // Groq API key validation
+      .addCase(validateGroqApiKey.pending, (state) => {
+        state.isValidatingGroqApiKey = true
+        state.groqApiKeyValidationError = null
+      })
+      .addCase(validateGroqApiKey.fulfilled, (state) => {
+        state.isValidatingGroqApiKey = false
+        state.isGroqApiKeyValid = true
+        state.groqApiKeyValidationError = null
+      })
+      .addCase(validateGroqApiKey.rejected, (state, action) => {
+        state.isValidatingGroqApiKey = false
+        state.isGroqApiKeyValid = false
+        state.groqApiKeyValidationError = action.payload as string
+      })
+
+      // OpenRouter API key validation
+      .addCase(validateOpenrouterApiKey.pending, (state) => {
+        state.isValidatingOpenrouterApiKey = true
+        state.openrouterApiKeyValidationError = null
+      })
+      .addCase(validateOpenrouterApiKey.fulfilled, (state) => {
+        state.isValidatingOpenrouterApiKey = false
+        state.isOpenrouterApiKeyValid = true
+        state.openrouterApiKeyValidationError = null
+      })
+      .addCase(validateOpenrouterApiKey.rejected, (state, action) => {
+        state.isValidatingOpenrouterApiKey = false
+        state.isOpenrouterApiKeyValid = false
+        state.openrouterApiKeyValidationError = action.payload as string
+      })
+
+      // Multiple OpenRouter API key validation
+      .addCase(validateMultipleOpenrouterApiKey.pending, (state, action) => {
+        const key = state.openrouterApiKeys.find(k => k.id === action.meta.arg.id)
+        if (key) {
+          key.isValidating = true
+          key.validationError = null
+        }
+        state.isValidatingAnyOpenrouter = true
+      })
+      .addCase(validateMultipleOpenrouterApiKey.fulfilled, (state, action) => {
+        const key = state.openrouterApiKeys.find(k => k.id === action.payload.id)
+        if (key) {
+          key.isValidating = false
+          key.isValid = true
+          key.validationError = null
+        }
+
+        // Check if any keys are still validating
+        state.isValidatingAnyOpenrouter = state.openrouterApiKeys.some(k => k.isValidating)
+        saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+      })
+      .addCase(validateMultipleOpenrouterApiKey.rejected, (state, action) => {
+        const payload = action.payload as { id: string; error: string }
+        const key = state.openrouterApiKeys.find(k => k.id === payload.id)
+        if (key) {
+          key.isValidating = false
+          key.isValid = false
+          key.validationError = payload.error
+        }
+
+        // Check if any keys are still validating
+        state.isValidatingAnyOpenrouter = state.openrouterApiKeys.some(k => k.isValidating)
+        saveOpenrouterApiKeysToStorage(state.openrouterApiKeys)
+      })
   }
 })
 
@@ -791,8 +1437,23 @@ export const {
   incrementApiKeyUsage,
   resetApiKeyUsage,
   clearApiKeyError,
+  addOpenrouterApiKey,
+  removeOpenrouterApiKey,
+  updateOpenrouterApiKeyName,
+  incrementOpenrouterApiKeyUsage,
+  resetOpenrouterApiKeyUsage,
+  clearOpenrouterApiKeyError,
   setTogetherApiKey,
   clearTogetherValidationError,
+  setOpenaiApiKey,
+  clearOpenaiValidationError,
+  setOpenaiSelectedModel,
+  setGroqApiKey,
+  clearGroqValidationError,
+  setOpenrouterApiKey,
+  clearOpenrouterValidationError,
+  setOpenrouterSelectedModel,
+  setMetadataProvider,
   toggleDarkMode,
   setDarkMode,
   setThemePreference,

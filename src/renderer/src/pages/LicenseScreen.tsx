@@ -20,7 +20,7 @@ const LicenseScreen = (): React.JSX.Element => {
         }
 
         const authData = JSON.parse(storedAuth)
-        
+
         // Check if stored credentials are not too old (30 days)
         const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000)
         if (authData.timestamp < thirtyDaysAgo) {
@@ -57,7 +57,7 @@ const LicenseScreen = (): React.JSX.Element => {
             userInfo: result.info,
             timestamp: Date.now()
           }))
-          
+
           // Notify main process that authentication was successful
           window.api.authSuccess(result.info)
         } else {
@@ -96,7 +96,7 @@ const LicenseScreen = (): React.JSX.Element => {
 
     try {
       let result
-      
+
       switch (authMode) {
         case 'license':
           result = await window.api.keyauth.license(formData.license)
@@ -115,11 +115,11 @@ const LicenseScreen = (): React.JSX.Element => {
           userInfo: result.info,
           timestamp: Date.now(),
           authMode: authMode,
-          credentials: authMode === 'license' ? 
-            { license: formData.license } : 
+          credentials: authMode === 'license' ?
+            { license: formData.license } :
             { username: formData.username, password: formData.password }
         }))
-        
+
         // Notify main process that authentication was successful
         window.api.authSuccess(result.info)
       } else {
@@ -154,31 +154,28 @@ const LicenseScreen = (): React.JSX.Element => {
         <div className="flex mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
           <button
             onClick={() => setAuthMode('license')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              authMode === 'license'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'license'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
           >
             License Key
           </button>
           <button
             onClick={() => setAuthMode('login')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              authMode === 'login'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'login'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
           >
             Login
           </button>
           <button
             onClick={() => setAuthMode('register')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
-              authMode === 'register'
-                ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-                : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'register'
+              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+              }`}
           >
             Register
           </button>

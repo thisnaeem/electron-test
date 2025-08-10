@@ -9,6 +9,7 @@ import FileConverter from './pages/tools/FileConverter'
 import PromptGenerator from './pages/tools/PromptGenerator'
 import FileProcessor from './pages/tools/FileProcessor'
 import MediaUpscaler from './pages/tools/MediaUpscaler'
+
 import AdobeScrapper from './pages/tools/AdobeScrapper'
 import ChatInterface from './pages/tools/ChatInterface'
 
@@ -17,6 +18,7 @@ import Sidebar from './components/Sidebar'
 import Settings from './pages/Settings'
 import Help from './pages/Help'
 import UpdateNotification from './components/UpdateNotification'
+import { ToastProvider } from './hooks/useToast'
 
 import { useAppSelector, useAppDispatch } from './store/hooks'
 import { setDarkMode } from './store/slices/settingsSlice'
@@ -119,6 +121,7 @@ function AppContent(): React.JSX.Element {
               <div className="py-8"><FileProcessor /></div>
             </div>
           } />
+
           <Route path="/media-upscaler" element={
             <div className={`flex-1 overflow-auto transition-all duration-200 ${isContentPage ? 'bg-white dark:bg-[#101113]' : ''}`}>
               <div className="py-8"><MediaUpscaler /></div>
@@ -187,11 +190,13 @@ function App(): React.JSX.Element {
   }, [dispatch, isDarkMode])
 
   return (
-    <GeminiProvider>
+    <ToastProvider>
+      <GeminiProvider>
         <Router>
           <AppContent />
         </Router>
-    </GeminiProvider>
+      </GeminiProvider>
+    </ToastProvider>
   )
 }
 

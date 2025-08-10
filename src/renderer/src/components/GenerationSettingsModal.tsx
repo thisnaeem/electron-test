@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react'
 import { useAppSelector, useAppDispatch } from '../store/hooks'
 import { updateGenerationSettings } from '../store/slices/settingsSlice'
 import { motion, AnimatePresence } from 'framer-motion'
+import Slider from './Slider'
+import { AI_MODELS } from '../utils/platformCategories'
+// import CategorySelector from './CategorySelector'
 import freepikLogo from '../assets/platforms/freepik.png'
 import shutterstockLogo from '../assets/platforms/shutterstock.png'
 import adobeLogo from '../assets/platforms/adobe.png'
@@ -107,6 +110,27 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
     customPostfix: generationSettings.titleCustomization?.customPostfix ?? false,
     postfixText: generationSettings.titleCustomization?.postfixText ?? ''
   })
+
+  // Platform-specific options state
+  const [platformOptions, setPlatformOptions] = useState({
+    freepik: {
+      isAiGenerated: generationSettings.platformOptions?.freepik?.isAiGenerated ?? false,
+      aiModel: generationSettings.platformOptions?.freepik?.aiModel ?? 'Midjourney 6'
+    },
+    "123rf": {
+      country: generationSettings.platformOptions?.["123rf"]?.country ?? 'US'
+    },
+    canva: {
+      artistName: generationSettings.platformOptions?.canva?.artistName ?? 'Your Artist Name'
+    },
+    dreamstime: {
+      isAiGenerated: generationSettings.platformOptions?.dreamstime?.isAiGenerated ?? false,
+      isFree: generationSettings.platformOptions?.dreamstime?.isFree ?? false,
+      isEditorial: generationSettings.platformOptions?.dreamstime?.isEditorial ?? false
+    }
+  })
+
+
 
   // Debug localStorage on component mount
   useEffect(() => {
@@ -286,7 +310,8 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
       platforms: selectedPlatforms,
       keywordSettings,
       customization,
-      titleCustomization
+      titleCustomization,
+      platformOptions
     }
 
     console.log('🎯 Confirming generation settings:', settings)
@@ -508,6 +533,8 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                       </div>
                     </button>
 
+
+
                     <button
                       onClick={() => setActiveTab('customization')}
                       className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
@@ -552,6 +579,31 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                         </p>
                       </div>
 
+                      {/* Provider Information */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                            <svg className="w-4 h-4 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                              AI Provider Information
+                            </h4>
+                            <p className="text-sm text-blue-700 dark:text-blue-300">
+                              These settings apply to metadata generation using your selected AI provider. 
+                              <button 
+                                onClick={() => window.location.hash = '#/settings'}
+                                className="underline hover:no-underline ml-1"
+                              >
+                                Change provider in Settings
+                              </button>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="space-y-8">
                         {/* Title Words Settings */}
                         <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
@@ -566,69 +618,33 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                           
                           <div className="space-y-6">
                             {/* Min Title Words */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Min Title Words
-                                </label>
-                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                                  {titleMinWords} words
-                                </div>
-                              </div>
-                              <input
-                                type="range"
-                                min="5"
-                                max="20"
+                            <div className="mb-6">
+                              <Slider
                                 value={titleMinWords}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value)
+                                onChange={(value) => {
                                   setTitleMinWords(value)
                                   if (value > titleMaxWords) setTitleMaxWords(value)
                                 }}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((titleMinWords - 5) / (20 - 5)) * 100}%, #e5e7eb ${((titleMinWords - 5) / (20 - 5)) * 100}%, #e5e7eb 100%)`
-                                }}
+                                min={5}
+                                max={20}
+                                label="Min Title Words"
+                                unit=" words"
                               />
-                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                <span>5</span>
-                                <span>10</span>
-                                <span>15</span>
-                                <span>20</span>
-                              </div>
                             </div>
 
                             {/* Max Title Words */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Max Title Words
-                                </label>
-                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                                  {titleMaxWords} words
-                                </div>
-                              </div>
-                              <input
-                                type="range"
-                                min="5"
-                                max="20"
+                            <div className="mb-6">
+                              <Slider
                                 value={titleMaxWords}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value)
+                                onChange={(value) => {
                                   setTitleMaxWords(value)
                                   if (value < titleMinWords) setTitleMinWords(value)
                                 }}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((titleMaxWords - 5) / (20 - 5)) * 100}%, #e5e7eb ${((titleMaxWords - 5) / (20 - 5)) * 100}%, #e5e7eb 100%)`
-                                }}
+                                min={5}
+                                max={20}
+                                label="Max Title Words"
+                                unit=" words"
                               />
-                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                <span>5</span>
-                                <span>10</span>
-                                <span>15</span>
-                                <span>20</span>
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -646,71 +662,33 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                           
                           <div className="space-y-6">
                             {/* Min Keywords */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Min Keywords
-                                </label>
-                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                                  {keywordsMinCount} keywords
-                                </div>
-                              </div>
-                              <input
-                                type="range"
-                                min="10"
-                                max="50"
+                            <div className="mb-6">
+                              <Slider
                                 value={keywordsMinCount}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value)
+                                onChange={(value) => {
                                   setKeywordsMinCount(value)
                                   if (value > keywordsMaxCount) setKeywordsMaxCount(value)
                                 }}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((keywordsMinCount - 10) / (50 - 10)) * 100}%, #e5e7eb ${((keywordsMinCount - 10) / (50 - 10)) * 100}%, #e5e7eb 100%)`
-                                }}
+                                min={10}
+                                max={50}
+                                label="Min Keywords"
+                                unit=" keywords"
                               />
-                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                <span>10</span>
-                                <span>20</span>
-                                <span>30</span>
-                                <span>40</span>
-                                <span>50</span>
-                              </div>
                             </div>
 
                             {/* Max Keywords */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Max Keywords
-                                </label>
-                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                                  {keywordsMaxCount} keywords
-                                </div>
-                              </div>
-                              <input
-                                type="range"
-                                min="10"
-                                max="50"
+                            <div className="mb-6">
+                              <Slider
                                 value={keywordsMaxCount}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value)
+                                onChange={(value) => {
                                   setKeywordsMaxCount(value)
                                   if (value < keywordsMinCount) setKeywordsMinCount(value)
                                 }}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((keywordsMaxCount - 10) / (50 - 10)) * 100}%, #e5e7eb ${((keywordsMaxCount - 10) / (50 - 10)) * 100}%, #e5e7eb 100%)`
-                                }}
+                                min={10}
+                                max={50}
+                                label="Max Keywords"
+                                unit=" keywords"
                               />
-                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                <span>10</span>
-                                <span>20</span>
-                                <span>30</span>
-                                <span>40</span>
-                                <span>50</span>
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -728,71 +706,33 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                           
                           <div className="space-y-6">
                             {/* Min Description Words */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Min Description Words
-                                </label>
-                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                                  {descriptionMinWords} words
-                                </div>
-                              </div>
-                              <input
-                                type="range"
-                                min="5"
-                                max="50"
+                            <div className="mb-6">
+                              <Slider
                                 value={descriptionMinWords}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value)
+                                onChange={(value) => {
                                   setDescriptionMinWords(value)
                                   if (value > descriptionMaxWords) setDescriptionMaxWords(value)
                                 }}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((descriptionMinWords - 5) / (50 - 5)) * 100}%, #e5e7eb ${((descriptionMinWords - 5) / (50 - 5)) * 100}%, #e5e7eb 100%)`
-                                }}
+                                min={5}
+                                max={50}
+                                label="Min Description Words"
+                                unit=" words"
                               />
-                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                <span>5</span>
-                                <span>15</span>
-                                <span>30</span>
-                                <span>40</span>
-                                <span>50</span>
-                              </div>
                             </div>
 
                             {/* Max Description Words */}
-                            <div>
-                              <div className="flex items-center justify-between mb-3">
-                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                                  Max Description Words
-                                </label>
-                                <div className="px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg text-sm font-medium">
-                                  {descriptionMaxWords} words
-                                </div>
-                              </div>
-                              <input
-                                type="range"
-                                min="5"
-                                max="50"
+                            <div className="mb-6">
+                              <Slider
                                 value={descriptionMaxWords}
-                                onChange={(e) => {
-                                  const value = parseInt(e.target.value)
+                                onChange={(value) => {
                                   setDescriptionMaxWords(value)
                                   if (value < descriptionMinWords) setDescriptionMinWords(value)
                                 }}
-                                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                                style={{
-                                  background: `linear-gradient(to right, #3b82f6 0%, #3b82f6 ${((descriptionMaxWords - 5) / (50 - 5)) * 100}%, #e5e7eb ${((descriptionMaxWords - 5) / (50 - 5)) * 100}%, #e5e7eb 100%)`
-                                }}
+                                min={5}
+                                max={50}
+                                label="Max Description Words"
+                                unit=" words"
                               />
-                              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-1">
-                                <span>5</span>
-                                <span>15</span>
-                                <span>30</span>
-                                <span>40</span>
-                                <span>50</span>
-                              </div>
                             </div>
                           </div>
                         </div>
@@ -1000,8 +940,232 @@ const GenerationSettingsModal: React.FC<GenerationSettingsModalProps> = ({
                           </motion.button>
                         ))}
                       </motion.div>
+
+                      {/* Platform-Specific Settings */}
+                      {selectedPlatforms.length > 0 && (
+                        <div className="space-y-6">
+                          <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                            <h4 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+                              Platform-Specific Settings
+                            </h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                              Configure platform-specific options for better CSV generation and compliance.
+                            </p>
+                          </div>
+
+                          {/* Freepik Settings */}
+                          {selectedPlatforms.includes('freepik') && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
+                              <div className="flex items-center gap-3 mb-4">
+                                <img src={freepikLogo} alt="Freepik" className="w-8 h-8 object-contain" />
+                                <h5 className="text-lg font-medium text-gray-900 dark:text-white">
+                                  Freepik Settings
+                                </h5>
+                              </div>
+                              
+                              <div className="space-y-4">
+                                {/* AI Generated Toggle */}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                      AI Generated Content
+                                    </label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      Enable if your images are AI-generated (adds Prompt and Model columns)
+                                    </p>
+                                  </div>
+                                  <label className="toggle-switch">
+                                    <input
+                                      type="checkbox"
+                                      checked={platformOptions.freepik.isAiGenerated}
+                                      onChange={(e) => setPlatformOptions(prev => ({
+                                        ...prev,
+                                        freepik: { ...prev.freepik, isAiGenerated: e.target.checked }
+                                      }))}
+                                    />
+                                    <span className="toggle-slider"></span>
+                                  </label>
+                                </div>
+
+                                {/* AI Model Selection */}
+                                {platformOptions.freepik.isAiGenerated && (
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                      AI Model Used
+                                    </label>
+                                    <select
+                                      value={platformOptions.freepik.aiModel}
+                                      onChange={(e) => setPlatformOptions(prev => ({
+                                        ...prev,
+                                        freepik: { ...prev.freepik, aiModel: e.target.value }
+                                      }))}
+                                      className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white"
+                                    >
+                                      {AI_MODELS.map(model => (
+                                        <option key={model} value={model}>{model}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 123RF Settings */}
+                          {selectedPlatforms.includes('123rf') && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
+                              <div className="flex items-center gap-3 mb-4">
+                                <img src={rf123Logo} alt="123RF" className="w-8 h-8 object-contain" />
+                                <h5 className="text-lg font-medium text-gray-900 dark:text-white">
+                                  123RF Settings
+                                </h5>
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                  Country
+                                </label>
+                                <select
+                                  value={platformOptions["123rf"].country}
+                                  onChange={(e) => setPlatformOptions(prev => ({
+                                    ...prev,
+                                    "123rf": { ...prev["123rf"], country: e.target.value }
+                                  }))}
+                                  className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white"
+                                >
+                                  <option value="US">United States</option>
+                                  <option value="UK">United Kingdom</option>
+                                  <option value="CA">Canada</option>
+                                  <option value="AU">Australia</option>
+                                  <option value="DE">Germany</option>
+                                  <option value="FR">France</option>
+                                  <option value="IT">Italy</option>
+                                  <option value="ES">Spain</option>
+                                  <option value="JP">Japan</option>
+                                  <option value="CN">China</option>
+                                  <option value="IN">India</option>
+                                  <option value="BR">Brazil</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Canva Settings */}
+                          {selectedPlatforms.includes('canva') && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
+                              <div className="flex items-center gap-3 mb-4">
+                                <img src={canvaLogo} alt="Canva" className="w-8 h-8 object-contain" />
+                                <h5 className="text-lg font-medium text-gray-900 dark:text-white">
+                                  Canva Settings
+                                </h5>
+                              </div>
+                              
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                  Artist Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={platformOptions.canva.artistName}
+                                  onChange={(e) => setPlatformOptions(prev => ({
+                                    ...prev,
+                                    canva: { ...prev.canva, artistName: e.target.value }
+                                  }))}
+                                  placeholder="Enter your artist name"
+                                  className="w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 dark:text-white"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Dreamstime Settings */}
+                          {selectedPlatforms.includes('dreamstime') && (
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-2xl p-6">
+                              <div className="flex items-center gap-3 mb-4">
+                                <img src={dreamstimeLogo} alt="Dreamstime" className="w-8 h-8 object-contain" />
+                                <h5 className="text-lg font-medium text-gray-900 dark:text-white">
+                                  Dreamstime Settings
+                                </h5>
+                              </div>
+                              
+                              <div className="space-y-4">
+                                {/* AI Generated Toggle */}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                      AI Generated Content
+                                    </label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      Mark content as AI-generated (affects category selection)
+                                    </p>
+                                  </div>
+                                  <label className="toggle-switch">
+                                    <input
+                                      type="checkbox"
+                                      checked={platformOptions.dreamstime.isAiGenerated}
+                                      onChange={(e) => setPlatformOptions(prev => ({
+                                        ...prev,
+                                        dreamstime: { ...prev.dreamstime, isAiGenerated: e.target.checked }
+                                      }))}
+                                    />
+                                    <span className="toggle-slider"></span>
+                                  </label>
+                                </div>
+
+                                {/* Free Content Toggle */}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                      Free Content
+                                    </label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      Mark content as free to download
+                                    </p>
+                                  </div>
+                                  <label className="toggle-switch">
+                                    <input
+                                      type="checkbox"
+                                      checked={platformOptions.dreamstime.isFree}
+                                      onChange={(e) => setPlatformOptions(prev => ({
+                                        ...prev,
+                                        dreamstime: { ...prev.dreamstime, isFree: e.target.checked }
+                                      }))}
+                                    />
+                                    <span className="toggle-slider"></span>
+                                  </label>
+                                </div>
+
+                                {/* Editorial Content Toggle */}
+                                <div className="flex items-center justify-between">
+                                  <div>
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                      Editorial Content
+                                    </label>
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                      Mark content as editorial use only
+                                    </p>
+                                  </div>
+                                  <label className="toggle-switch">
+                                    <input
+                                      type="checkbox"
+                                      checked={platformOptions.dreamstime.isEditorial}
+                                      onChange={(e) => setPlatformOptions(prev => ({
+                                        ...prev,
+                                        dreamstime: { ...prev.dreamstime, isEditorial: e.target.checked }
+                                      }))}
+                                    />
+                                    <span className="toggle-slider"></span>
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </motion.div>
                   )}
+
+
 
                   {/* Customization Content */}
                   {activeTab === 'customization' && (

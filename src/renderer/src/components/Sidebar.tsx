@@ -152,7 +152,7 @@ const Sidebar = (): React.JSX.Element => {
                       }}
                       className="flex items-center gap-3 px-4 py-3 rounded-lg hover:bg-gray-100 dark:hover:bg-[#383b4a] transition-colors text-left"
                     >
-                      <img src={tool.icon} alt={tool.name} className="w-6 h-6" />
+                      <img src={tool.icon} alt={tool.name} className="w-6 h-6 dark:filter dark:invert" />
                       <span className="font-medium text-gray-900 dark:text-white">{tool.name}</span>
                     </button>
                   ))}

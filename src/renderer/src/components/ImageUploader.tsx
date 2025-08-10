@@ -17,97 +17,86 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
   const [isHovering, setIsHovering] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Advanced image compression optimized for low-end PCs
+  // Ultra-fast image compression optimized for low-end PCs
   const compressImageIfNeeded = useCallback(async (imageData: string, originalSize: number): Promise<string> => {
+    // Skip compression for files under 10MB to speed up processing significantly
+    if (originalSize < 10 * 1024 * 1024) {
+      return imageData
+    }
+
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
       const img = new Image()
 
+      // Set timeout to prevent hanging on corrupted images
+      const timeout = setTimeout(() => {
+        resolve(imageData) // Return original if compression takes too long
+      }, 2000)
+
       img.onload = () => {
-        let { width, height } = img
-        let quality = 0.85 // Default quality
-        let maxSize = 1200 // Default max size
+        clearTimeout(timeout)
 
-        // Aggressive compression based on file size for low-end PC optimization
-        if (originalSize > 8 * 1024 * 1024) { // > 8MB - Very large files
-          maxSize = 800
-          quality = 0.6
-        } else if (originalSize > 5 * 1024 * 1024) { // > 5MB - Large files
-          maxSize = 1000
-          quality = 0.7
-        } else if (originalSize > 2 * 1024 * 1024) { // > 2MB - Medium files
-          maxSize = 1200
-          quality = 0.75
-        } else if (originalSize > 1 * 1024 * 1024) { // > 1MB - Small-medium files
-          maxSize = 1400
-          quality = 0.8
-        } else {
-          // Small files - minimal compression
-          maxSize = 1600
-          quality = 0.9
-        }
+        try {
+          let { width, height } = img
+          const maxSize = 600 // Even smaller for low-end PCs
+          const quality = 0.6 // Lower quality for speed
 
-        // Calculate new dimensions
-        if (width > height && width > maxSize) {
-          height = (height * maxSize) / width
-          width = maxSize
-        } else if (height > maxSize) {
-          width = (width * maxSize) / height
-          height = maxSize
-        }
+          // Aggressive resizing for low-end PCs
+          if (width > maxSize || height > maxSize) {
+            if (width > height) {
+              height = Math.floor((height * maxSize) / width)
+              width = maxSize
+            } else {
+              width = Math.floor((width * maxSize) / height)
+              height = maxSize
+            }
 
-        canvas.width = width
-        canvas.height = height
+            canvas.width = width
+            canvas.height = height
 
-        if (ctx) {
-          // Optimize canvas settings for performance
-          ctx.imageSmoothingEnabled = true
-          ctx.imageSmoothingQuality = 'high'
-
-          // Use white background for JPEGs to avoid transparency issues
-          ctx.fillStyle = '#FFFFFF'
-          ctx.fillRect(0, 0, width, height)
-
-          ctx.drawImage(img, 0, 0, width, height)
-
-          // Always output as JPEG for better compression
-          const compressedData = canvas.toDataURL('image/jpeg', quality)
-
-          // Verify compression actually reduced size
-          const originalDataSize = imageData.length
-          const compressedDataSize = compressedData.length
-
-          // Use compressed version only if it's actually smaller
-          if (compressedDataSize < originalDataSize) {
-            resolve(compressedData)
+            if (ctx) {
+              ctx.imageSmoothingEnabled = false // Disable for maximum speed
+              ctx.imageSmoothingQuality = 'low'
+              ctx.drawImage(img, 0, 0, width, height)
+              const compressedData = canvas.toDataURL('image/jpeg', quality)
+              resolve(compressedData)
+            } else {
+              resolve(imageData)
+            }
           } else {
-            resolve(imageData) // Fallback to original if compression didn't help
+            resolve(imageData) // No compression needed
           }
-        } else {
-          resolve(imageData) // Fallback to original
+        } catch (error) {
+          console.warn('Image compression failed, using original:', error)
+          resolve(imageData)
         }
       }
 
-      img.onerror = () => resolve(imageData) // Fallback to original
+      img.onerror = () => {
+        clearTimeout(timeout)
+        resolve(imageData)
+      }
+
       img.src = imageData
     })
   }, [])
 
+  // Memory management and batch processing for low-end PCs
   const processFiles = useCallback(async (incomingFiles: File[]) => {
     try {
       setError(null)
 
-      // Check if upload would exceed the 1000 file limit
+      // Check if upload would exceed the 2000 file limit
       const currentFileCount = files.length
-      if (currentFileCount >= 1000) {
-        setError('You have reached the maximum limit of 1000 files.')
+      if (currentFileCount >= 2000) {
+        setError('You have reached the maximum limit of 2000 files.')
         return
       }
 
-      if (currentFileCount + incomingFiles.length > 1000) {
-        const remainingSlots = 1000 - currentFileCount
-        setError(`You can only upload ${remainingSlots} more file${remainingSlots === 1 ? '' : 's'} to reach the 1000 file limit.`)
+      if (currentFileCount + incomingFiles.length > 2000) {
+        const remainingSlots = 2000 - currentFileCount
+        setError(`You can only upload ${remainingSlots} more file${remainingSlots === 1 ? '' : 's'} to reach the 2000 file limit.`)
         return
       }
 
@@ -130,46 +119,78 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
       // Start upload processing
       dispatch(setUploadProcessing({ isProcessing: true, total: validFiles.length }))
 
-      // Process each file
-      for (let i = 0; i < validFiles.length; i++) {
-        const file = validFiles[i]
-        const fileId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      // Low-end PC optimization: Process files in small batches to prevent memory issues
+      const BATCH_SIZE = 5 // Process only 5 files at a time
+      const MEMORY_CLEANUP_INTERVAL = 10 // Force garbage collection every 10 files
 
-        // Update progress - show current file being processed
-        dispatch(updateUploadProgress({ current: i, currentFileName: file.name }))
+      for (let batchStart = 0; batchStart < validFiles.length; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, validFiles.length)
+        const batch = validFiles.slice(batchStart, batchEnd)
 
-        // Process the media file (images, videos, vectors)
-        const processedData = await processMediaFile(file)
+        // Process batch sequentially to avoid overwhelming memory
+        for (let i = 0; i < batch.length; i++) {
+          const globalIndex = batchStart + i
+          const file = batch[i]
+          const fileId = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 
-        // Create file data object
-        const fileData = {
-          id: fileId,
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          lastModified: file.lastModified,
-          previewPath: '',
-          previewData: processedData.previewData,
-          fileType: processedData.fileType,
-          originalData: processedData.originalData
+          try {
+            // Update progress - show current file being processed
+            dispatch(updateUploadProgress({ current: globalIndex, currentFileName: file.name }))
+
+            // Process the media file (images, videos, vectors)
+            const processedData = await processMediaFile(file)
+
+            // Create file data object
+            const fileData = {
+              id: fileId,
+              name: file.name,
+              type: file.type,
+              size: file.size,
+              lastModified: file.lastModified,
+              previewPath: '',
+              previewData: processedData.previewData,
+              fileType: processedData.fileType,
+              originalData: processedData.originalData
+            }
+
+            // For images, apply compression if needed
+            let finalPreviewData = processedData.previewData
+            if (processedData.fileType === 'image') {
+              finalPreviewData = await compressImageIfNeeded(processedData.previewData, file.size)
+            }
+
+            // Save preview to file system
+            const filename = `${fileId}.png`
+            await dispatch(saveImagePreview({ filename, imageData: finalPreviewData }))
+
+            // Add file to store with preview data
+            dispatch(addFile({
+              ...fileData,
+              previewPath: filename,
+              previewData: finalPreviewData
+            }))
+
+            // Memory cleanup for low-end PCs
+            if ((globalIndex + 1) % MEMORY_CLEANUP_INTERVAL === 0) {
+              // Force garbage collection and give browser time to clean up
+              if (window.gc) {
+                window.gc()
+              }
+              // Small delay to prevent UI freezing
+              await new Promise(resolve => setTimeout(resolve, 100))
+            }
+
+          } catch (fileError) {
+            console.error(`Error processing file ${file.name}:`, fileError)
+            // Continue with next file instead of stopping entire batch
+            continue
+          }
         }
 
-        // For images, apply compression if needed
-        let finalPreviewData = processedData.previewData
-        if (processedData.fileType === 'image') {
-          finalPreviewData = await compressImageIfNeeded(processedData.previewData, file.size)
+        // Batch completion delay to prevent overwhelming the system
+        if (batchEnd < validFiles.length) {
+          await new Promise(resolve => setTimeout(resolve, 200))
         }
-
-        // Save preview to file system
-        const filename = `${fileId}.png`
-        await dispatch(saveImagePreview({ filename, imageData: finalPreviewData }))
-
-        // Add file to store with preview data
-        dispatch(addFile({
-          ...fileData,
-          previewPath: filename,
-          previewData: finalPreviewData
-        }))
       }
 
       // Update final progress to show completion
@@ -180,6 +201,11 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
 
       // End upload processing
       dispatch(setUploadProcessing({ isProcessing: false }))
+
+      // Final memory cleanup
+      if (window.gc) {
+        window.gc()
+      }
 
       // Notify parent component
       onFilesAccepted(validFiles)
@@ -207,8 +233,8 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
     setIsDragOver(false)
 
     // Check if at file limit before processing
-    if (files.length >= 1000) {
-      setError('You have reached the maximum limit of 1000 files.')
+    if (files.length >= 2000) {
+      setError('You have reached the maximum limit of 2000 files.')
       return
     }
 
@@ -218,10 +244,10 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
 
   const handleClick = useCallback(() => {
     // Check if at file limit before opening file dialog
-    if (files.length >= 1000) {
-      setError('You have reached the maximum limit of 1000 files.')
+    if (files.length >= 2000) {
+      setError('You have reached the maximum limit of 2000 files.')
       return
-  }
+    }
 
     const input = document.createElement('input')
     input.type = 'file'
@@ -255,7 +281,7 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
       )}
 
       <div
-            className={`
+        className={`
           rounded-xl p-8 transition-all duration-200 ease-in-out bg-[#f3f4f6] dark:bg-[#141517] w-3/4 max-w-3xl h-96 flex items-center justify-center
           ${isDragOver ? 'ring-4 ring-violet-400 dark:ring-violet-600' : 'hover:ring-4 hover:ring-blue-300 dark:hover:ring-blue-700'}
               ${isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
@@ -265,25 +291,25 @@ const ImageUploader = ({ onFilesAccepted, isProcessing }: ImageUploaderProps): R
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={isProcessing ? undefined : handleClick}
-            onMouseEnter={() => setIsHovering(true)}
-            onMouseLeave={() => setIsHovering(false)}
-          >
-            <div className="flex flex-col items-center justify-center">
-              <img
-                src={isHovering ? addSquareIcon : uploadIcon}
-                alt="Upload"
-                className="w-16 h-16 mb-4 transition-all duration-200 dark:invert"
-                draggable="false"
-              />
-              <p className="text-lg font-medium text-gray-700 mb-2 dark:text-white">
+        onMouseEnter={() => setIsHovering(true)}
+        onMouseLeave={() => setIsHovering(false)}
+      >
+        <div className="flex flex-col items-center justify-center">
+          <img
+            src={isHovering ? addSquareIcon : uploadIcon}
+            alt="Upload"
+            className="w-16 h-16 mb-4 transition-all duration-200 dark:invert"
+            draggable="false"
+          />
+          <p className="text-lg font-medium text-gray-700 mb-2 dark:text-white">
             {isDragOver ? 'Drop files here' : 'Drop files here or click to upload'}
-              </p>
-              <p className="text-sm text-gray-500 dark:text-white">
-            Images (50MB), Videos (100MB) - up to 1000 files
-              </p>
-            </div>
-              </div>
-            </>
+          </p>
+          <p className="text-sm text-gray-500 dark:text-white">
+            Images (50MB), Videos (100MB) - up to 2000 files
+          </p>
+        </div>
+      </div>
+    </>
   )
 }
 

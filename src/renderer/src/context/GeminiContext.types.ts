@@ -116,7 +116,7 @@ export interface GeminiContextType {
   processingProgress: ProcessingProgress | null
   generationStartTime: number | null
 
-  // Rate limiting info
+  // Rate limiting info (basic support only)
   rateLimitInfo: { [apiKeyId: string]: RateLimitInfo }
 
   // API key management

@@ -3,7 +3,7 @@ import React from 'react'
 const BackgroundRemover = (): React.JSX.Element => {
   const openBackgroundRemoverWebsite = (): void => {
     // Open remove.bg or similar background removal service
-    window.open('https://www.csvgen.com', '_blank')
+    window.open('https://bgremoverapp.vercel.app/', '_blank')
   }
 
   return (

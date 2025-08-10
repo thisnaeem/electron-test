@@ -220,6 +220,48 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
+
+  /* Toast animations */
+  @keyframes slideIn {
+    from {
+      transform: translateX(calc(100% + 1.5rem));
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes hide {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+
+  @keyframes swipeOut {
+    from {
+      transform: translateX(var(--radix-toast-swipe-end-x));
+    }
+    to {
+      transform: translateX(calc(100% + 1.5rem));
+    }
+  }
+
+  .animate-slideIn {
+    animation: slideIn 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-hide {
+    animation: hide 100ms ease-in;
+  }
+
+  .animate-swipeOut {
+    animation: swipeOut 100ms ease-out;
+  }
 }
 
 @layer utilities {

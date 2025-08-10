@@ -3,7 +3,7 @@ import React from 'react'
 const FileConverter = (): React.JSX.Element => {
   const openFileConverterWebsite = (): void => {
     // Open csvgen.com
-    window.open('https://www.csvgen.com', '_blank')
+    window.open('https://www.csvgen.com/tools/png-to-jpg', '_blank')
   }
 
   return (

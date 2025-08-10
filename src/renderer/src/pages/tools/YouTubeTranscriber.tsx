@@ -3,7 +3,7 @@ import React from 'react'
 const YouTubeTranscriber = (): React.JSX.Element => {
   const openYouTubeTranscriptService = (): void => {
     // Open YouTube transcript service
-    window.open('https://www.csvgen.com', '_blank')
+    window.open('https://transcribeo.vercel.app/', '_blank')
   }
 
   return (

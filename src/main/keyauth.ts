@@ -72,8 +72,7 @@ class KeyAuth {
         token = fs.readFileSync(this.path, "utf-8").trim();
       } catch (error) {
         console.error(`Failed to read file at path ${this.path}:`, error);
-        await this.sleep(5000);
-        process.exit(0);
+        throw new Error(`Failed to read token file: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
 
@@ -93,8 +92,7 @@ class KeyAuth {
 
     if (response === "KeyAuth_Invalid") {
       console.log("This application does not exist");
-      await this.sleep(5000);
-      process.exit(0);
+      throw new Error("Application does not exist in KeyAuth system");
     }
 
     if (response["message"] === "invalidver") {
@@ -105,19 +103,16 @@ class KeyAuth {
             console.error("Failed to open the download link:", error);
           }
         });
-        await this.sleep(5000);
-        process.exit(0);
+        throw new Error("Application version is outdated");
       } else {
         console.log("Your application is outdated and no download link was provided, contact the owner for the latest app version.");
-        await this.sleep(5000);
-        process.exit(0);
+        throw new Error("Application version is outdated, no download link provided");
       }
     }
 
     if (response["success"] === false) {
       console.log(response["message"]);
-      await this.sleep(5000);
-      process.exit(0);
+      throw new Error(response["message"] || "KeyAuth initialization failed");
     }
 
     this.sessionid = response["sessionid"];
@@ -208,57 +203,83 @@ class KeyAuth {
     const platform = os.platform();
 
     if (platform === "win32") {
-      // Try multiple methods for Windows HWID generation
-      try {
-        // Method 1: Try to get machine GUID from registry
+      // Try multiple methods for Windows HWID generation with better error handling
+      const methods = [
+        // Method 1: Try to get machine GUID from registry (with timeout)
+        () => {
+          try {
+            const output = execSync('reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', { 
+              encoding: 'utf8',
+              timeout: 5000,
+              windowsHide: true
+            });
+            const match = output.match(/MachineGuid\s+REG_SZ\s+(.+)/);
+            if (match && match[1] && match[1].trim().length > 10) {
+              return match[1].trim();
+            }
+          } catch (error) {
+            console.log("Registry method failed:", error instanceof Error ? error.message : 'Unknown error');
+          }
+          return null;
+        },
+
+        // Method 2: Try to get motherboard serial number (with timeout)
+        () => {
+          try {
+            const output = execSync('wmic baseboard get serialnumber', { 
+              encoding: 'utf8',
+              timeout: 5000,
+              windowsHide: true
+            });
+            const lines = output.split('\n').filter(line => line.trim() && !line.includes('SerialNumber'));
+            if (lines.length > 0 && lines[0].trim() && lines[0].trim().length > 3) {
+              return lines[0].trim();
+            }
+          } catch (error) {
+            console.log("WMIC baseboard method failed:", error instanceof Error ? error.message : 'Unknown error');
+          }
+          return null;
+        },
+
+        // Method 3: Try to get CPU ID (with timeout)
+        () => {
+          try {
+            const output = execSync('wmic cpu get processorid', { 
+              encoding: 'utf8',
+              timeout: 5000,
+              windowsHide: true
+            });
+            const lines = output.split('\n').filter(line => line.trim() && !line.includes('ProcessorId'));
+            if (lines.length > 0 && lines[0].trim() && lines[0].trim().length > 3) {
+              return lines[0].trim();
+            }
+          } catch (error) {
+            console.log("WMIC CPU method failed:", error instanceof Error ? error.message : 'Unknown error');
+          }
+          return null;
+        }
+      ];
+
+      // Try each method sequentially
+      for (let i = 0; i < methods.length; i++) {
         try {
-          const output = execSync('reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', { encoding: 'utf8' });
-          const match = output.match(/MachineGuid\s+REG_SZ\s+(.+)/);
-          if (match && match[1]) {
-            return match[1].trim();
+          const result = methods[i]();
+          if (result) {
+            console.log(`HWID method ${i + 1} succeeded`);
+            return result;
           }
         } catch (error) {
-          console.log("Method 1 failed, trying method 2...");
+          console.log(`HWID method ${i + 1} failed:`, error instanceof Error ? error.message : 'Unknown error');
         }
-
-        // Method 2: Try to get motherboard serial number
-        try {
-          const output = execSync('wmic baseboard get serialnumber', { encoding: 'utf8' });
-          const lines = output.split('\n').filter(line => line.trim() && !line.includes('SerialNumber'));
-          if (lines.length > 0 && lines[0].trim()) {
-            return lines[0].trim();
-          }
-        } catch (error) {
-          console.log("Method 2 failed, trying method 3...");
-        }
-
-        // Method 3: Try to get CPU ID
-        try {
-          const output = execSync('wmic cpu get processorid', { encoding: 'utf8' });
-          const lines = output.split('\n').filter(line => line.trim() && !line.includes('ProcessorId'));
-          if (lines.length > 0 && lines[0].trim()) {
-            return lines[0].trim();
-          }
-        } catch (error) {
-          console.log("Method 3 failed, trying method 4...");
-        }
-
-        // Method 4: Fallback to username + hostname hash
-        const username = os.userInfo().username;
-        const hostname = os.hostname();
-        const fallbackId = crypto.createHash('sha256').update(`${username}-${hostname}`).digest('hex');
-        console.log("Using fallback HWID method");
-        return fallbackId;
-
-      } catch (error) {
-        console.error("All HWID methods failed on Windows:", error);
-        // Final fallback - generate a consistent ID based on system info
-        const username = os.userInfo().username;
-        const hostname = os.hostname();
-        const platform_info = os.platform() + os.arch();
-        const fallbackId = crypto.createHash('sha256').update(`${username}-${hostname}-${platform_info}`).digest('hex');
-        return fallbackId;
       }
+
+      // Fallback method - always works
+      console.log("All Windows HWID methods failed, using fallback");
+      const username = os.userInfo().username;
+      const hostname = os.hostname();
+      const platform_info = os.platform() + os.arch();
+      const fallbackId = crypto.createHash('sha256').update(`${username}-${hostname}-${platform_info}-${Date.now()}`).digest('hex');
+      return fallbackId;
     } else if (platform === "linux") {
       try {
         const hwid = fs.readFileSync("/etc/machine-id", "utf-8").trim();
@@ -295,24 +316,28 @@ class KeyAuth {
     }
   }
 
-  private async sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+
 
   private async __do_request(data: any) {
     try {
+      // Add timeout to prevent hanging
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
       const response = await fetch(this.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
         },
         body: new URLSearchParams(data).toString(),
+        signal: controller.signal
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.error(`HTTP error! Status: ${response.status}`);
-        await this.sleep(5000);
-        process.exit(0);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
       const responseData = await response.json();
@@ -327,8 +352,7 @@ class KeyAuth {
 
       if (!signature || !timestamp) {
         console.log("Missing signature or timestamp in response headers");
-        await this.sleep(5000);
-        process.exit(0);
+        throw new Error("Missing signature or timestamp in response headers");
       }
 
       const server_time = new Date(Number(timestamp) * 1000).toUTCString();
@@ -338,21 +362,18 @@ class KeyAuth {
 
       if (time_difference > buffer_seconds + 20) {
         console.log(`Time difference is too large: ${time_difference} seconds, try syncing your date and time settings.`);
-        await this.sleep(5000);
-        process.exit(0);
+        throw new Error(`Time difference too large: ${time_difference} seconds`);
       }
 
       if (!verifyKey(Buffer.from(JSON.stringify(responseData), 'utf-8'), signature, timestamp, this.public_key)) {
         console.log("Signature checksum failed. Request was tampered with or session ended most likely.");
-        await this.sleep(3000);
-        process.exit(0);
+        throw new Error("Signature verification failed");
       }
 
       return responseData;
     } catch (error) {
-      console.error("Unexpected error:", error);
-      await this.sleep(5000);
-      process.exit(0);
+      console.error("Request error:", error);
+      throw error; // Re-throw instead of process.exit
     }
   }
 
@@ -406,20 +427,51 @@ export interface AuthResponse {
 class KeyAuthMainService {
   private isInitialized = false
   private currentUser: LicenseInfo | null = null
+  private offlineMode = false
 
   async initialize(): Promise<boolean> {
     try {
+      console.log('Attempting KeyAuth initialization...')
       await KeyAuthApp.init()
       this.isInitialized = true
+      this.offlineMode = false
       console.log('KeyAuth initialized successfully')
       return true
     } catch (error: unknown) {
       console.error('KeyAuth initialization failed:', error)
+      console.log('Enabling offline mode - authentication will be bypassed')
+      this.offlineMode = true
+      this.isInitialized = false
       return false
     }
   }
 
+  isOfflineMode(): boolean {
+    return this.offlineMode
+  }
+
   async login(username: string, password: string): Promise<AuthResponse> {
+    // If in offline mode, simulate successful login
+    if (this.offlineMode) {
+      console.log('Offline mode: simulating successful login')
+      const userInfo: LicenseInfo = {
+        username: username || 'Offline User',
+        subscription: 'Offline Mode',
+        subscriptionExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
+        ip: 'Offline',
+        hwid: 'Offline',
+        createDate: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      }
+
+      this.currentUser = userInfo
+      return {
+        success: true,
+        message: 'Login successful (Offline Mode)',
+        info: userInfo
+      }
+    }
+
     if (!this.isInitialized) {
       const initialized = await this.initialize()
       if (!initialized) {
@@ -486,6 +538,27 @@ class KeyAuthMainService {
   }
 
   async license(licenseKey: string): Promise<AuthResponse> {
+    // If in offline mode, simulate successful license activation
+    if (this.offlineMode) {
+      console.log('Offline mode: simulating successful license activation')
+      const userInfo: LicenseInfo = {
+        username: 'Licensed User (Offline)',
+        subscription: 'Offline License',
+        subscriptionExpiry: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(), // 1 year from now
+        ip: 'Offline',
+        hwid: 'Offline',
+        createDate: new Date().toISOString(),
+        lastLogin: new Date().toISOString()
+      }
+
+      this.currentUser = userInfo
+      return {
+        success: true,
+        message: 'License activated successfully (Offline Mode)',
+        info: userInfo
+      }
+    }
+
     if (!this.isInitialized) {
       const initialized = await this.initialize()
       if (!initialized) {

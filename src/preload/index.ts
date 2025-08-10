@@ -45,7 +45,8 @@ const api = {
     isAuthenticated: () => ipcRenderer.invoke('keyauth-is-authenticated'),
     isSubscriptionValid: () => ipcRenderer.invoke('keyauth-is-subscription-valid'),
     getDaysRemaining: () => ipcRenderer.invoke('keyauth-get-days-remaining'),
-    logout: () => ipcRenderer.invoke('keyauth-logout')
+    logout: () => ipcRenderer.invoke('keyauth-logout'),
+    isOfflineMode: () => ipcRenderer.invoke('keyauth-is-offline-mode')
   },
 
   // Auth success notification
