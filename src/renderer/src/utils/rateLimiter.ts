@@ -9,7 +9,6 @@ const MIN_REQUEST_INTERVAL = 5000 // Minimum 5 seconds between requests from sam
 
 export class RateLimiter {
   private rateLimitInfo: { [apiKeyId: string]: RateLimitInfo } = {}
-  // private roundRobinIndex: number = 0 // For round-robin distribution (not used)
   private globalRequestCount: number = 0
   private globalWindowStart: number = Date.now()
 
@@ -40,7 +39,7 @@ export class RateLimiter {
     }
 
     // Check minimum interval between requests (increased to 10 seconds)
-    if ((info as any).lastRequestTime && (now - (info as any).lastRequestTime) < (MIN_REQUEST_INTERVAL * 2)) {
+    if (info.lastRequestTime && (now - info.lastRequestTime) < (MIN_REQUEST_INTERVAL * 2)) {
       console.log(`🚫 API key ${apiKeyId} still in cooldown period`)
       return false
     }
@@ -73,7 +72,7 @@ export class RateLimiter {
     }
 
     info.requestsInCurrentMinute++
-    ;(info as any).lastRequestTime = now
+    info.lastRequestTime = now
 
     // Check if we've hit the limit (with safety buffer)
     if (info.requestsInCurrentMinute >= (REQUESTS_PER_MINUTE - SAFETY_BUFFER)) {
@@ -268,7 +267,6 @@ export class RateLimiter {
    * Reset round-robin index to ensure fresh distribution when API keys change
    */
   resetRoundRobin(): void {
-    // no-op: round-robin index not used currently
     console.log('🔄 Reset round-robin index for fresh API key distribution')
   }
 

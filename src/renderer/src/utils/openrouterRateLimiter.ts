@@ -37,7 +37,6 @@ const SAFETY_BUFFER = 2 // Leave 2 requests as buffer
 
 export class OpenRouterRateLimiter {
   private rateLimitInfo: { [apiKeyId: string]: OpenRouterRateLimitInfo } = {}
-  // private roundRobinIndex: number = 0 // reserved for future balancing
 
   constructor() {
     this.cleanupOldData()

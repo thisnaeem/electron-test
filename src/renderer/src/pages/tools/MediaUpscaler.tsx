@@ -3,10 +3,26 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks'
 import { addFile, saveImagePreview, removeFile, clearFiles } from '../../store/slices/filesSlice'
 import uploadIcon from '../../assets/icons/image-upload-stroke-rounded.svg'
 import addSquareIcon from '../../assets/icons/add-square-stroke-rounded.svg'
+import JSZip from 'jszip'
 
 interface UpscaleSettings {
   scale: 2 | 4 | 6 | 8
-  format: 'png' | 'jpg' | 'webp'
+  format: 'png' | 'jpg' | 'webp' // default UI format (unused when preserving original)
+}
+
+type ImageFormat = 'png' | 'jpg' | 'webp'
+
+function getFormatFromFile(file: { type?: string; name?: string }): ImageFormat {
+  const mime = (file.type || '').toLowerCase()
+  if (mime.includes('png')) return 'png'
+  if (mime.includes('jpeg') || mime.includes('jpg')) return 'jpg'
+  if (mime.includes('webp')) return 'webp'
+
+  const ext = (file.name || '').split('.').pop()?.toLowerCase()
+  if (ext === 'png') return 'png'
+  if (ext === 'jpg' || ext === 'jpeg') return 'jpg'
+  if (ext === 'webp') return 'webp'
+  return 'png'
 }
 
 const MediaUpscaler = (): React.JSX.Element => {
@@ -14,7 +30,7 @@ const MediaUpscaler = (): React.JSX.Element => {
   const { files } = useAppSelector(state => state.files)
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingProgress, setProcessingProgress] = useState({ current: 0, total: 0 })
-  const [processedResults, setProcessedResults] = useState<Array<{ fileId: string; original: string; upscaled: string }>>([])
+  const [processedResults, setProcessedResults] = useState<Array<{ fileId: string; original: string; upscaled: string; format: ImageFormat }>>([])
   const [isDragOver, setIsDragOver] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -105,23 +121,23 @@ const MediaUpscaler = (): React.JSX.Element => {
     input.click()
   }, [processFiles])
 
-  const upscaleImage = useCallback(async (dataUrl: string, settings: UpscaleSettings): Promise<string> => {
+  const upscaleImage = useCallback(async (dataUrl: string, scale: UpscaleSettings['scale'], format: ImageFormat): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image()
       img.onload = () => {
         const canvas = document.createElement('canvas')
         const ctx = canvas.getContext('2d')
 
-        canvas.width = img.width * settings.scale
-        canvas.height = img.height * settings.scale
+        canvas.width = img.width * scale
+        canvas.height = img.height * scale
 
         if (ctx) {
           ctx.imageSmoothingEnabled = true
           ctx.imageSmoothingQuality = 'high'
           ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
 
-          const mimeType = `image/${settings.format}`
-          const quality = settings.format === 'jpg' ? 0.9 : undefined
+          const mimeType = `image/${format}`
+          const quality = format === 'jpg' ? 0.9 : undefined
           resolve(canvas.toDataURL(mimeType, quality))
         } else {
           resolve(dataUrl)
@@ -139,7 +155,7 @@ const MediaUpscaler = (): React.JSX.Element => {
     setProcessedResults([])
 
     try {
-      const results: Array<{ fileId: string; original: string; upscaled: string }> = []
+      const results: Array<{ fileId: string; original: string; upscaled: string; format: ImageFormat }> = []
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
@@ -150,12 +166,14 @@ const MediaUpscaler = (): React.JSX.Element => {
         const originalDataUrl = file.previewData
         if (!originalDataUrl) continue
 
-        const upscaledDataUrl = await upscaleImage(originalDataUrl, settings)
+        const fileFormat = getFormatFromFile(file)
+        const upscaledDataUrl = await upscaleImage(originalDataUrl, settings.scale, fileFormat)
 
         results.push({
           fileId: file.id,
           original: originalDataUrl,
-          upscaled: upscaledDataUrl
+          upscaled: upscaledDataUrl,
+          format: fileFormat
         })
       }
 
@@ -204,10 +222,10 @@ const MediaUpscaler = (): React.JSX.Element => {
     input.click()
   }, [processFiles])
 
-  const downloadUpscaledImage = useCallback((upscaledDataUrl: string, originalName: string) => {
+  const downloadUpscaledImage = useCallback((upscaledDataUrl: string, originalName: string, format: ImageFormat) => {
     const link = document.createElement('a')
     link.href = upscaledDataUrl
-    link.download = `${originalName.split('.')[0]}_upscaled_${settings.scale}x.${settings.format}`
+    link.download = `${originalName.split('.')[0]}_upscaled_${settings.scale}x.${format}`
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
@@ -221,25 +239,17 @@ const MediaUpscaler = (): React.JSX.Element => {
       return
     }
 
-    try {
-      // Create a zip file with all upscaled images
-      let JSZip
-      try {
-        JSZip = (await import('jszip')).default
-      } catch (importError) {
-        // Fallback: download images individually if JSZip fails to load
-        console.warn('JSZip failed to load, downloading images individually:', importError)
-        for (const result of upscaledResults) {
-          const file = files.find(f => f.id === result.fileId)
-          if (file && result.upscaled) {
-            downloadUpscaledImage(result.upscaled, file.name)
-            // Add small delay between downloads
-            await new Promise(resolve => setTimeout(resolve, 100))
-          }
+    const fallbackDownloadIndividually = async (): Promise<void> => {
+      for (const result of upscaledResults) {
+        const file = files.find(f => f.id === result.fileId)
+        if (file && result.upscaled) {
+          downloadUpscaledImage(result.upscaled, file.name, result.format)
+          await new Promise(resolve => setTimeout(resolve, 100))
         }
-        return
       }
+    }
 
+    try {
       const zip = new JSZip()
 
       for (let i = 0; i < upscaledResults.length; i++) {
@@ -247,24 +257,38 @@ const MediaUpscaler = (): React.JSX.Element => {
         const file = files.find(f => f.id === result.fileId)
 
         if (file && result.upscaled) {
-          // Convert data URL to blob
-          const response = await fetch(result.upscaled)
-          const blob = await response.blob()
+          // Extract base64 from data URL to avoid fetch() on data URIs
+          const commaIndex = result.upscaled.indexOf(',')
+          const base64Data = commaIndex !== -1 ? result.upscaled.substring(commaIndex + 1) : ''
+          if (!base64Data) continue
 
-          const filename = `${file.name.split('.')[0]}_upscaled_${settings.scale}x.${settings.format}`
-          zip.file(filename, blob)
+          const filename = `${file.name.split('.')[0]}_upscaled_${settings.scale}x.${result.format}`
+          zip.file(filename, base64Data, { base64: true })
         }
       }
 
+      // If nothing was added, fallback
+      if (Object.keys(zip.files).length === 0) {
+        await fallbackDownloadIndividually()
+        return
+      }
+
       // Generate zip and download
-      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } })
+      const objectUrl = URL.createObjectURL(zipBlob)
       const link = document.createElement('a')
-      link.href = URL.createObjectURL(zipBlob)
+      link.href = objectUrl
       link.download = `upscaled_images_${settings.scale}x.zip`
       document.body.appendChild(link)
       link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(link.href)
+
+      // Defer cleanup to ensure download has started
+      setTimeout((): void => {
+        if (link.parentNode) {
+          document.body.removeChild(link)
+        }
+        URL.revokeObjectURL(objectUrl)
+      }, 1500)
 
       // Show notification
       try {
@@ -277,12 +301,12 @@ const MediaUpscaler = (): React.JSX.Element => {
       }
 
     } catch (error) {
-      console.error('Error creating zip file:', error)
-      setError('Failed to create download package. Please try downloading images individually.')
+      console.error('Error creating zip file, falling back to individual downloads:', error)
+      await fallbackDownloadIndividually()
     }
-  }, [processedResults, files, settings])
+  }, [processedResults, files, settings, downloadUpscaledImage])
 
-  const UploadArea = () => (
+  const UploadArea = (): React.JSX.Element => (
     <>
       {error && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 max-w-lg w-full text-center bg-red-50 dark:bg-red-900/20 p-4 rounded-lg shadow-lg z-50">
@@ -328,7 +352,7 @@ const MediaUpscaler = (): React.JSX.Element => {
     </>
   )
 
-  const ImagesGrid = () => (
+  const ImagesGrid = (): React.JSX.Element => (
     <div className="w-full relative">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
@@ -430,7 +454,7 @@ const MediaUpscaler = (): React.JSX.Element => {
                 <div className="flex gap-2">
                   {isUpscaled && result && (
                     <button
-                      onClick={() => downloadUpscaledImage(result.upscaled, file.name)}
+                      onClick={() => downloadUpscaledImage(result.upscaled, file.name, result.format)}
                       className="p-2 bg-green-500 hover:bg-green-600 text-white rounded-lg transition-colors"
                       title="Download upscaled image"
                     >

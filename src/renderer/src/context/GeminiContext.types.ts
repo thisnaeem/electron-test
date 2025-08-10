@@ -34,6 +34,7 @@ export interface RateLimitInfo {
   windowStartTime: number
   isLimited: boolean
   nextAvailableTime: number
+  lastRequestTime?: number
 }
 
 // New interfaces for prompt generation
