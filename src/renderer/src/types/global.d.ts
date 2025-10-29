@@ -1,11 +1,6 @@
 declare global {
   interface Window {
     api: {
-      // Auto-updater APIs
-      checkForUpdates: () => Promise<any>
-      downloadUpdate: () => Promise<any>
-      quitAndInstall: () => Promise<any>
-      onUpdateStatus: (callback: (data: any) => void) => () => void
       getAppVersion: () => Promise<string>
 
       // External links

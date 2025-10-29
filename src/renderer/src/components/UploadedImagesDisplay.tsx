@@ -824,8 +824,8 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                 </div>
               )}
 
-              {/* Metadata available indicator - Always visible green checkmark */}
-              {hasFileMetadata && !isSelected && (
+              {/* Metadata available indicator - Only show when metadata is complete and not processing */}
+              {hasFileMetadata && !isSelected && !isCurrentlyProcessing && (
                 <div className="absolute top-2 right-2 bg-green-500 text-white rounded-full p-1 shadow-lg">
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -833,16 +833,19 @@ const UploadedImagesDisplay = memo(({ onClear, onProcess, onFilesAccepted, onIma
                 </div>
               )}
 
-              {/* Metadata generation failed indicator - Red cross for failed images */}
-              {!hasFileMetadata && !isCurrentlyProcessing && metadataResults && metadataResults.length > 0 && (
-                <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 shadow-lg">
-                  <Tooltip text="Metadata generation failed">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </Tooltip>
-                </div>
-              )}
+              {/* Metadata generation failed indicator - Red cross for failed images only */}
+              {(() => {
+                const failedResult = metadataResults?.find(result => result.filename === file.name && result.failed === true)
+                return failedResult && !isCurrentlyProcessing && (
+                  <div className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1.5 shadow-lg">
+                    <Tooltip text="Metadata generation failed">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </Tooltip>
+                  </div>
+                )
+              })()}
 
               {/* Overlay with remove button - Hidden when processing */}
               {!isCurrentlyProcessing && (

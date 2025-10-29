@@ -49,12 +49,13 @@ const TitleBar = (): React.JSX.Element => {
       className="fixed top-0 left-0 w-full z-50 flex items-center h-10 bg-white/90 dark:bg-[#1a1b23]/95 backdrop-blur-sm select-none border-b border-gray-100 dark:border-[#383b4a]"
       style={{ WebkitAppRegion: 'drag' } as StyleWithWebkitAppRegion}
     >
-      {/* App title */}
-      <div className="flex items-center h-full px-4">
+      {/* App logo and title */}
+      <div className="flex items-center h-full px-4 gap-2">
+        <img src="icons/logo.png" alt="StockMeta AI" className="w-5 h-5" />
         <span className="text-sm font-medium text-gray-800 dark:text-white">
-          CSVGen{' '}
+          StockMeta{' '}
           <span className="font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-            PRO
+            AI
           </span>
         </span>
       </div>

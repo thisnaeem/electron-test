@@ -11,8 +11,8 @@ export interface ProcessedFileData {
 // Extract frame from video file optimized for low-end PCs
 export const extractVideoFrame = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    // Check file size - skip very large videos on low-end PCs
-    if (file.size > 200 * 1024 * 1024) { // 200MB limit
+    // Check file size - skip very large videos
+    if (file.size > 1024 * 1024 * 1024) { // 1GB limit
       reject(new Error('Video file too large for processing'))
       return
     }
@@ -704,13 +704,13 @@ export const validateFile = (file: File): { isValid: boolean; error?: string } =
 
   // Check file sizes
   const maxImageSize = 50 * 1024 * 1024 // 50MB for images
-  const maxVideoSize = 100 * 1024 * 1024 // 100MB for videos
+  const maxVideoSize = 1024 * 1024 * 1024 // 1GB for videos
   const maxVectorSize = 10 * 1024 * 1024 // 10MB for vectors
 
   if (isVideo && file.size > maxVideoSize) {
     return {
       isValid: false,
-      error: `${file.name} is too large. Please use videos smaller than 100MB.`
+      error: `${file.name} is too large. Please use videos smaller than 1GB.`
     }
   }
 

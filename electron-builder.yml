@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: CSVGen Pro
+appId: com.stockmeta.ai
+productName: StockMeta AI
 directories:
   buildResources: build
 files:
@@ -14,9 +14,9 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
-icon: resources/app-logo.ico
+# icon: resources/app-logo.ico
 win:
-  executableName: csvgen-pro
+  executableName: stockmeta-ai
   target:
     - target: nsis
       arch:
@@ -31,9 +31,9 @@ nsis:
   createStartMenuShortcut: true
   oneClick: false
   allowToChangeInstallationDirectory: true
-  installerIcon: resources/app-logo.ico
-  uninstallerIcon: resources/app-logo.ico
-  installerHeaderIcon: resources/app-logo.ico
+  # installerIcon: resources/app-logo.ico
+  # uninstallerIcon: resources/app-logo.ico
+  # installerHeaderIcon: resources/app-logo.ico
   runAfterFinish: true
   menuCategory: false
 mac:

@@ -3,13 +3,12 @@ import { useState } from 'react'
 import AiGenerativeIcon from '../assets/ai-generative.svg'
 import SettingsIcon from '../assets/settings.svg'
 import NavigationIcon from '../assets/icons/navigation.svg'
-import AppLogo from '../assets/app-logo.png'
+import AppLogo from '../../../../public/icons/logo.png'
 import ImageIcon from '../assets/icons/image-02-stroke-rounded.svg'
 import YouTubeIcon from '../assets/icons/youtube-stroke-rounded.svg'
 import DocumentIcon from '../assets/icons/google-doc-stroke-rounded.svg'
 import PromptIcon from '../assets/icons/ai-content-generator-01-stroke-rounded.svg'
 import FileIcon from '../assets/icons/file-02-stroke-rounded.svg'
-import ChatIcon from '../assets/icons/comment-02-stroke-rounded.svg'
 import HelpIcon from '../assets/icons/help-square-stroke-rounded.svg'
 import SaturnIcon from '../assets/icons/saturn-01-stroke-rounded.svg'
 
@@ -65,54 +64,6 @@ const Sidebar = (): React.JSX.Element => {
             }`}
           />
           <span className="text-xs mt-1">Generator</span>
-        </Link>
-
-        <Link
-          to="/chat"
-          className={`flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
-            isActive('/chat')
-              ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
-              : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
-          }`}
-        >
-          <img
-            src={ChatIcon}
-            alt="AI Chat"
-            className={`w-6 h-6 transition-all duration-200 ${
-              isActive('/chat')
-                ? 'opacity-100'
-                : 'opacity-60 group-hover:opacity-100'
-            } ${
-              isActive('/chat')
-                ? 'dark:filter dark:invert'
-                : 'dark:filter dark:invert dark:opacity-70'
-            }`}
-          />
-          <span className="text-xs mt-1">Chat</span>
-        </Link>
-
-        <Link
-          to="/image-generator"
-          className={`flex flex-col items-center w-16 h-16 justify-center rounded-xl transition-all duration-200 ${
-            isActive('/image-generator')
-              ? 'bg-white text-[#1a1b1e] dark:bg-[#383b4a] dark:text-white'
-              : 'text-gray-400 hover:bg-white/60 hover:text-[#1a1b1e] dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-white'
-          }`}
-        >
-          <img
-            src={ImageIcon}
-            alt="AI Image Generator"
-            className={`w-6 h-6 transition-all duration-200 ${
-              isActive('/image-generator')
-                ? 'opacity-100'
-                : 'opacity-60 group-hover:opacity-100'
-            } ${
-              isActive('/image-generator')
-                ? 'dark:filter dark:invert'
-                : 'dark:filter dark:invert dark:opacity-70'
-            }`}
-          />
-          <span className="text-xs mt-1">Images</span>
         </Link>
 
         {/* Navigation with popup - Tools (moved above Settings/Help) */}
@@ -216,13 +167,13 @@ const Sidebar = (): React.JSX.Element => {
       <div className="pb-4 flex flex-col items-center gap-2">
         {/* Website link */}
         <button
-          onClick={() => window.open('https://csvgen.com', '_blank')}
+          onClick={() => window.open('https://stockmeta.ai', '_blank')}
           className="flex items-center justify-center w-12 h-12 rounded transition-all duration-200 text-gray-400 hover:bg-white/60 hover:text-blue-600 dark:text-gray-400 dark:hover:bg-[#383b4a]/60 dark:hover:text-blue-400 group"
-          title="Visit CSVGen.com"
+          title="Visit StockMeta.ai"
         >
           <img
             src={SaturnIcon}
-            alt="CSVGen Website"
+            alt="StockMeta Website"
             className="w-6 h-6 transition-all duration-200 opacity-60 group-hover:opacity-100 dark:filter dark:invert"
           />
         </button>

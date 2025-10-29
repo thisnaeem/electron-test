@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
+import AppLogo from '../../../../public/icons/logo.png'
 
 const LicenseScreen = (): React.JSX.Element => {
-  const [authMode, setAuthMode] = useState<'license' | 'login' | 'register'>('license')
   const [formData, setFormData] = useState({
-    username: '',
-    password: '',
     license: ''
   })
   const [isLoading, setIsLoading] = useState(false)
@@ -42,12 +40,7 @@ const LicenseScreen = (): React.JSX.Element => {
         setIsLoading(true)
 
         // Attempt to re-authenticate with stored credentials
-        let result
-        if (authData.authMode === 'license') {
-          result = await window.api.keyauth.license(authData.credentials.license)
-        } else {
-          result = await window.api.keyauth.login(authData.credentials.username, authData.credentials.password)
-        }
+        const result = await window.api.keyauth.license(authData.credentials.license)
 
         if (result.success) {
           console.log('Auto-login successful')
@@ -95,29 +88,15 @@ const LicenseScreen = (): React.JSX.Element => {
     setError(null)
 
     try {
-      let result
-
-      switch (authMode) {
-        case 'license':
-          result = await window.api.keyauth.license(formData.license)
-          break
-        case 'login':
-          result = await window.api.keyauth.login(formData.username, formData.password)
-          break
-        case 'register':
-          result = await window.api.keyauth.register(formData.username, formData.password, formData.license)
-          break
-      }
+      const result = await window.api.keyauth.license(formData.license)
 
       if (result.success) {
         // Save user credentials to localStorage for future auto-login
         localStorage.setItem('keyauth_user', JSON.stringify({
           userInfo: result.info,
           timestamp: Date.now(),
-          authMode: authMode,
-          credentials: authMode === 'license' ?
-            { license: formData.license } :
-            { username: formData.username, password: formData.password }
+          authMode: 'license',
+          credentials: { license: formData.license }
         }))
 
         // Notify main process that authentication was successful
@@ -137,10 +116,8 @@ const LicenseScreen = (): React.JSX.Element => {
       <div className="w-full max-w-md">
         {/* Logo and Title */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
+          <div className="w-20 h-20 flex items-center justify-center mx-auto mb-4">
+            <img src={AppLogo} alt="StockMeta AI" className="w-full h-full object-contain" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
             License Required
@@ -150,109 +127,23 @@ const LicenseScreen = (): React.JSX.Element => {
           </p>
         </div>
 
-        {/* Auth Mode Tabs */}
-        <div className="flex mb-6 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          <button
-            onClick={() => setAuthMode('license')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'license'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-          >
-            License Key
-          </button>
-          <button
-            onClick={() => setAuthMode('login')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'login'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-          >
-            Login
-          </button>
-          <button
-            onClick={() => setAuthMode('register')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${authMode === 'register'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-              }`}
-          >
-            Register
-          </button>
-        </div>
-
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4">
-          {authMode === 'license' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                License Key
-              </label>
-              <input
-                type="text"
-                name="license"
-                value={formData.license}
-                onChange={handleInputChange}
-                placeholder="Enter your license key"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                required
-                disabled={isLoading}
-              />
-            </div>
-          )}
-
-          {(authMode === 'login' || authMode === 'register') && (
-            <>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  name="username"
-                  value={formData.username}
-                  onChange={handleInputChange}
-                  placeholder="Enter your username"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  name="password"
-                  value={formData.password}
-                  onChange={handleInputChange}
-                  placeholder="Enter your password"
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </>
-          )}
-
-          {authMode === 'register' && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                License Key
-              </label>
-              <input
-                type="text"
-                name="license"
-                value={formData.license}
-                onChange={handleInputChange}
-                placeholder="Enter your license key"
-                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                required
-                disabled={isLoading}
-              />
-            </div>
-          )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              License Key
+            </label>
+            <input
+              type="text"
+              name="license"
+              value={formData.license}
+              onChange={handleInputChange}
+              placeholder="Enter your license key"
+              className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+              required
+              disabled={isLoading}
+            />
+          </div>
 
           {/* Error Message */}
           {error && (
@@ -281,11 +172,7 @@ const LicenseScreen = (): React.JSX.Element => {
                 Processing...
               </>
             ) : (
-              <>
-                {authMode === 'license' && 'Activate License'}
-                {authMode === 'login' && 'Login'}
-                {authMode === 'register' && 'Register'}
-              </>
+              'Activate License'
             )}
           </button>
         </form>
@@ -293,9 +180,7 @@ const LicenseScreen = (): React.JSX.Element => {
         {/* Help Text */}
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {authMode === 'license' && 'Enter your license key to activate the application'}
-            {authMode === 'login' && 'Login with your existing account credentials'}
-            {authMode === 'register' && 'Create a new account with your license key'}
+            Enter your license key to activate the application
           </p>
         </div>
       </div>

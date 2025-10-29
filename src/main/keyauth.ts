@@ -322,7 +322,7 @@ class KeyAuth {
     try {
       // Add timeout to prevent hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout (increased from 10)
 
       const response = await fetch(this.url, {
         method: "POST",
@@ -403,9 +403,9 @@ class KeyAuth {
 
 // KeyAuth configuration
 const KeyAuthApp = new KeyAuth({
-  name: "csvgen-electron", // Your application name from KeyAuth dashboard
-  ownerid: "hvkFRk9A87", // Your Owner ID from KeyAuth dashboard
-  version: "1.0", // Your application version
+  name: "Zahidtechsolution's Application", // App name
+  ownerid: "Pi4qpTtCLB", // Account ID
+  version: "1.0", // Application version. Used for automatic downloads see video here https://www.youtube.com/watch?v=kW195PLCBKs
 })
 
 export interface LicenseInfo {

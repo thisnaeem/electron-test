@@ -15,7 +15,7 @@ const Generator = (): React.JSX.Element => {
   const { generateMetadata, stopGeneration, isLoading, error, processingProgress, generationStartTime } = useGemini()
   const dispatch = useAppDispatch()
   const { files, metadata } = useAppSelector(state => state.files)
-  const { apiKeys, generationSettings, autoDownloadCsv, metadataProvider, openaiApiKey, isOpenaiApiKeyValid, openaiSelectedModel, groqApiKey, isGroqApiKeyValid, openrouterApiKey, isOpenrouterApiKeyValid, openrouterSelectedModel } = useAppSelector(state => state.settings)
+  const { apiKeys, generationSettings, autoDownloadCsv, metadataProvider, openaiApiKey, isOpenaiApiKeyValid, openaiSelectedModel } = useAppSelector(state => state.settings)
   const [selectedImageId, setSelectedImageId] = useState<string | null>(null)
   const [showErrorDialog, setShowErrorDialog] = useState(false)
 
@@ -25,11 +25,7 @@ const Generator = (): React.JSX.Element => {
     metadataProvider,
     {
       openaiApiKey,
-      isOpenaiApiKeyValid,
-      groqApiKey,
-      isGroqApiKeyValid,
-      openrouterApiKey,
-      isOpenrouterApiKeyValid
+      isOpenaiApiKeyValid
     }
   )
   const needsOnboarding = !accessResult.hasAccess
@@ -104,17 +100,7 @@ const Generator = (): React.JSX.Element => {
       return
     }
 
-    // Check if Groq is selected but not configured
-    if (metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)) {
-      setShowErrorDialog(true)
-      return
-    }
 
-    // Check if OpenRouter is selected but not configured
-    if (metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)) {
-      setShowErrorDialog(true)
-      return
-    }
 
     try {
       // Convert to ImageInput format if needed
@@ -318,23 +304,10 @@ const Generator = (): React.JSX.Element => {
             }`}></div>
             <span className="text-sm text-gray-700 dark:text-gray-300">
               Using {
-                metadataProvider === 'gemini' ? 'Google Gemini' : 
-                metadataProvider === 'openai' ? `OpenAI ${openaiSelectedModel || 'GPT-4o-mini'}` : 
-                metadataProvider === 'groq' ? 'Groq LLaVA-v1.5-7B' :
-                `OpenRouter ${openrouterSelectedModel?.split('/')[1]?.split(':')[0] || 'Model'}`
+                metadataProvider === 'gemini' ? 'Google Gemini' : `OpenAI ${openaiSelectedModel || 'GPT-4o-mini'}`
               } for metadata generation
             </span>
             {metadataProvider === 'openai' && !isOpenaiApiKeyValid && (
-              <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
-                API key not configured
-              </span>
-            )}
-            {metadataProvider === 'groq' && !isGroqApiKeyValid && (
-              <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
-                API key not configured
-              </span>
-            )}
-            {metadataProvider === 'openrouter' && !isOpenrouterApiKeyValid && (
               <span className="text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-2 py-1 rounded">
                 API key not configured
               </span>
@@ -428,20 +401,12 @@ const Generator = (): React.JSX.Element => {
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                   {metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid) 
                     ? 'OpenAI API Key Required' 
-                    : metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)
-                    ? 'Groq API Key Required'
-                    : metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)
-                    ? 'OpenRouter API Key Required'
                     : 'Generation Failed'}
                 </h3>
               </div>
               <p className="text-gray-600 dark:text-gray-300 mb-6">
                 {metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid)
                   ? 'You have selected OpenAI as your metadata provider, but no valid API key is configured. Please add and validate your OpenAI API key in Settings.'
-                  : metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)
-                  ? 'You have selected Groq as your metadata provider, but no valid API key is configured. Please add and validate your Groq API key in Settings.'
-                  : metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)
-                  ? 'You have selected OpenRouter as your metadata provider, but no valid API key is configured. Please add and validate your OpenRouter API key in Settings.'
                   : (error || 'An error occurred while generating metadata. Please try again.')}
               </p>
               <div className="flex justify-end gap-3">
@@ -451,9 +416,7 @@ const Generator = (): React.JSX.Element => {
                 >
                   Close
                 </button>
-                {(metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid)) || 
-                 (metadataProvider === 'groq' && (!groqApiKey || !isGroqApiKeyValid)) ||
-                 (metadataProvider === 'openrouter' && (!openrouterApiKey || !isOpenrouterApiKeyValid)) ? (
+                {(metadataProvider === 'openai' && (!openaiApiKey || !isOpenaiApiKeyValid)) ? (
                   <button
                     onClick={() => {
                       handleCloseErrorDialog()

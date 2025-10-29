@@ -177,10 +177,6 @@ export class ApiKeyValidationService {
     providerApiKeys?: {
       openaiApiKey?: string
       isOpenaiApiKeyValid?: boolean
-      groqApiKey?: string
-      isGroqApiKeyValid?: boolean
-      openrouterApiKey?: string
-      isOpenrouterApiKeyValid?: boolean
     }
   ): GeneratorAccessResult {
     // Provider-specific validation
@@ -198,29 +194,7 @@ export class ApiKeyValidationService {
               : 'OpenAI API key required for metadata generation'
           }
 
-        case 'groq':
-          const hasValidGroq = providerApiKeys.groqApiKey && providerApiKeys.isGroqApiKeyValid
-          return {
-            hasAccess: !!hasValidGroq,
-            validKeyCount: hasValidGroq ? 1 : 0,
-            requiredKeyCount: 1,
-            missingKeyCount: hasValidGroq ? 0 : 1,
-            message: hasValidGroq 
-              ? 'Generator access granted with valid Groq API key'
-              : 'Groq API key required for metadata generation'
-          }
 
-        case 'openrouter':
-          const hasValidOpenRouter = providerApiKeys.openrouterApiKey && providerApiKeys.isOpenrouterApiKeyValid
-          return {
-            hasAccess: !!hasValidOpenRouter,
-            validKeyCount: hasValidOpenRouter ? 1 : 0,
-            requiredKeyCount: 1,
-            missingKeyCount: hasValidOpenRouter ? 0 : 1,
-            message: hasValidOpenRouter 
-              ? 'Generator access granted with valid OpenRouter API key'
-              : 'OpenRouter API key required for metadata generation'
-          }
 
         case 'gemini':
         default:

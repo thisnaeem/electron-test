@@ -17,6 +17,7 @@ export interface MetadataResult {
   title: string
   keywords: string[]
   description?: string
+  failed?: boolean // Optional flag to indicate generation failure
 }
 
 interface FilesState {

@@ -1,16 +1,14 @@
 import { ApiKeyInfo } from '../store/slices/settingsSlice'
 import { RateLimitInfo } from '../context/GeminiContext.types'
 
-// Gemini API rate limit: 14 requests per minute per API key
-const REQUESTS_PER_MINUTE = 14
+// Gemini API rate limit: Balanced settings for multiple API keys
+const REQUESTS_PER_MINUTE = 15 // Gemini allows 15 requests per minute per key
 const MINUTE_IN_MS = 60 * 1000
-const SAFETY_BUFFER = 3 // Increased safety buffer to avoid hitting limits
-const MIN_REQUEST_INTERVAL = 5000 // Minimum 5 seconds between requests from same key
+const SAFETY_BUFFER = 2 // Safety buffer to avoid hitting exact limits
+const MIN_REQUEST_INTERVAL = 1000 // Minimum 1 second between requests from same key
 
 export class RateLimiter {
   private rateLimitInfo: { [apiKeyId: string]: RateLimitInfo } = {}
-  private globalRequestCount: number = 0
-  private globalWindowStart: number = Date.now()
 
   constructor() {
     // Clean up old rate limit data on initialization
@@ -24,11 +22,7 @@ export class RateLimiter {
     const info = this.getRateLimitInfo(apiKeyId)
     const now = Date.now()
 
-    // Reset global window if minute has passed
-    if (now - this.globalWindowStart >= MINUTE_IN_MS) {
-      this.globalRequestCount = 0
-      this.globalWindowStart = now
-    }
+    // Individual API key rate limiting only (no global limits)
 
     // Reset individual key window if minute has passed
     if (now - info.windowStartTime >= MINUTE_IN_MS) {
@@ -38,17 +32,14 @@ export class RateLimiter {
       info.nextAvailableTime = 0
     }
 
-    // Check minimum interval between requests (increased to 10 seconds)
-    if (info.lastRequestTime && (now - info.lastRequestTime) < (MIN_REQUEST_INTERVAL * 2)) {
-      console.log(`🚫 API key ${apiKeyId} still in cooldown period`)
+    // Check minimum interval between requests
+    if (info.lastRequestTime && (now - info.lastRequestTime) < MIN_REQUEST_INTERVAL) {
+      console.log(`🚫 API key ${apiKeyId} still in cooldown period (${MIN_REQUEST_INTERVAL/1000}s minimum interval)`)
       return false
     }
 
-    // Global rate limiting: max 5 requests per minute across ALL keys
-    if (this.globalRequestCount >= 5) {
-      console.log(`🚫 Global rate limit reached: ${this.globalRequestCount}/5 requests in current window`)
-      return false
-    }
+    // Remove global rate limiting to allow proper utilization of multiple API keys
+    // Each key has its own individual rate limit which is more appropriate
 
     // Use safety buffer to avoid hitting exact rate limit
     const canMake = info.requestsInCurrentMinute < (REQUESTS_PER_MINUTE - SAFETY_BUFFER)

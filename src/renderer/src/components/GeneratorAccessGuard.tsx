@@ -164,11 +164,7 @@ const GeneratorAccessGuard: React.FC<GeneratorAccessGuardProps> = ({
     apiKeys, 
     metadataProvider, 
     openaiApiKey, 
-    isOpenaiApiKeyValid, 
-    groqApiKey, 
-    isGroqApiKeyValid, 
-    openrouterApiKey, 
-    isOpenrouterApiKeyValid 
+    isOpenaiApiKeyValid
   } = useAppSelector(state => state.settings)
   
   // Use the validation service to check access with provider-specific logic
@@ -177,11 +173,7 @@ const GeneratorAccessGuard: React.FC<GeneratorAccessGuardProps> = ({
     metadataProvider,
     {
       openaiApiKey,
-      isOpenaiApiKeyValid,
-      groqApiKey,
-      isGroqApiKeyValid,
-      openrouterApiKey,
-      isOpenrouterApiKeyValid
+      isOpenaiApiKeyValid
     }
   )
   

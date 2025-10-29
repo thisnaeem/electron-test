@@ -15,29 +15,62 @@ import {
   removeApiKey,
   validateMultipleApiKey,
   incrementApiKeyUsage,
-  incrementOpenrouterApiKeyUsage,
   ApiKeyInfo
 } from '../store/slices/settingsSlice'
 // Rate limiting imports removed since logic was reverted
-import { compressImageForGemini, isImageWithinSizeLimit, getImageSize } from '../utils/imageCompression'
+// Image compression utilities removed - not needed for batch processing
 import { OpenAIMetadataService } from '../services/OpenAIMetadataService'
-import { GroqMetadataService } from '../services/GroqMetadataService'
-import { OpenRouterMetadataService } from '../services/OpenRouterMetadataService'
-import { openrouterRateLimiter } from '../utils/openrouterRateLimiter'
 import { rateLimiter } from '../utils/rateLimiter'
 
 // Retry configuration - More aggressive retries, no fallback metadata
 const MAX_RETRIES = 10 // Increased to 10 for more persistent retries
 const RETRY_DELAY = 300 // Reduced to 300ms for faster retries
 // Conservative parallel limit to avoid rate limiting
-const getOptimalParallelLimit = (apiKeys: ApiKeyInfo[]): number => {
-  const validApiKeys = apiKeys.filter(key => key.isValid)
-  // Simple parallel limit based on available API keys
-  return Math.min(validApiKeys.length, 5) // Max 5 concurrent requests
-}
+// Note: getOptimalParallelLimit function removed as it was unused
 
 // Helper function to wait
 const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+
+// Performance optimization for low-end devices
+const isLowEndDevice = () => {
+  // Detect low-end devices based on available memory and CPU cores
+  const memory = (navigator as any).deviceMemory || 4 // Default to 4GB if not available
+  const cores = navigator.hardwareConcurrency || 4 // Default to 4 cores if not available
+  return memory <= 4 || cores <= 2
+}
+
+// Adaptive batch size based on device capabilities
+const getOptimalBatchSize = () => {
+  if (isLowEndDevice()) {
+    return 2 // Smaller batches for low-end devices
+  }
+  return 6 // Standard batch size for capable devices
+}
+
+// Adaptive delay for UI responsiveness
+const getProcessingDelay = () => {
+  if (isLowEndDevice()) {
+    return 2000 + Math.random() * 1000 // 2-3 second delay for low-end devices
+  }
+  return 1000 + Math.random() * 1000 // 1-2 second delay for capable devices
+}
+
+// Exponential backoff for rate limit handling
+const getExponentialBackoffDelay = (retryCount: number, baseDelay: number = 1000) => {
+  const exponentialDelay = baseDelay * Math.pow(2, retryCount)
+  const jitter = Math.random() * 1000 // Add jitter to prevent thundering herd
+  return Math.min(exponentialDelay + jitter, 30000) // Cap at 30 seconds
+}
+
+// Check if error is rate limit related
+const isRateLimitError = (error: any) => {
+  const errorMessage = error?.message?.toLowerCase() || ''
+  const errorStatus = error?.status || error?.code
+  return errorStatus === 429 || 
+         errorMessage.includes('rate limit') || 
+         errorMessage.includes('quota') || 
+         errorMessage.includes('too many requests')
+}
 
 export function GeminiProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const dispatch = useAppDispatch()
@@ -49,12 +82,6 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
     openaiApiKey,
     isOpenaiApiKeyValid,
     openaiSelectedModel,
-    groqApiKey,
-    isGroqApiKeyValid,
-    openrouterApiKey,
-    isOpenrouterApiKeyValid,
-    openrouterApiKeys,
-    openrouterSelectedModel,
     metadataProvider
   } = useAppSelector(state => state.settings)
 
@@ -67,8 +94,8 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
   const abortControllerRef = useRef<AbortController | null>(null)
   const stopRequestedRef = useRef<boolean>(false)
 
-  const generateMetadataForSingleImage = useCallback(async (
-    imageInput: ImageInput,
+  const generateMetadataForBatch = useCallback(async (
+    batch: ImageInput[],
     apiKeyInfo: ApiKeyInfo,
     settings?: {
       titleWords: number;
@@ -101,243 +128,100 @@ export function GeminiProvider({ children }: { children: ReactNode }): React.JSX
         postfixText: string;
       }
     }
-  ): Promise<MetadataResult> => {
-    const { imageData, filename, fileType, originalData } = imageInput
+  ): Promise<MetadataResult[]> => {
+    const genAI = new GoogleGenerativeAI(apiKeyInfo.key)
+    const modelName = 'gemini-2.0-flash'
+    const model = genAI.getGenerativeModel({ model: modelName })
 
-    try {
-      // Check if base64 data is valid
-      if (!imageData || !imageData.includes(',')) {
-        throw new Error('Invalid image data')
-      }
+    // Create batch prompt for multiple images
+    const batchPrompt = `Generate metadata for ${batch.length} images. For each image, provide:
+- Title: ${settings?.titleWords || 8} words
+- Description: ${settings?.descriptionWords || 25} words  
+- Keywords: ${settings?.keywordsCount || 15} relevant keywords
 
-      // Check image size and compress if necessary (Gemini has 4MB limit)
-      const originalSize = getImageSize(imageData)
-      console.log(`📏 Original image size: ${Math.round(originalSize / 1024)}KB`)
+Format your response as:
+IMAGE 1:
+Title: [title]
+Description: [description]
+Keywords: [keyword1, keyword2, ...]
 
+IMAGE 2:
+Title: [title]
+Description: [description]
+Keywords: [keyword1, keyword2, ...]
+
+(Continue for all images)`
+
+    // Prepare content with all images
+    const content: (string | Part)[] = [batchPrompt]
+    
+    for (const imageInput of batch) {
+      const { filename, imageData } = imageInput
       let processedImageData = imageData
-      if (!isImageWithinSizeLimit(imageData)) {
-        console.log(`🗜️ Image ${filename} exceeds 4MB limit, compressing...`)
-        try {
-          const compressionResult = await compressImageForGemini(imageData)
-          processedImageData = compressionResult.compressedData
-          console.log(`✅ Compressed ${filename} from ${Math.round(compressionResult.originalSize / 1024)}KB to ${Math.round(compressionResult.compressedSize / 1024)}KB`)
-        } catch (compressionError) {
-          console.error(`❌ Failed to compress ${filename}:`, compressionError)
-          throw new Error(`Image ${filename} is too large and could not be compressed for Gemini API`)
-        }
-      }
-
-      // Special handling for SVG files - they might need additional processing
-      if (filename.toLowerCase().endsWith('.svg') && fileType === 'vector') {
-        console.log(`🎨 Processing SVG file: ${filename}`)
-
-        // Ensure the SVG was properly converted to a raster image
-        if (!imageData.includes('data:image/')) {
-          throw new Error(`SVG file ${filename} was not properly converted to image format`)
-        }
-
-        // Log the conversion details for debugging
-        const imageSizeKB = Math.round(imageData.length / 1024)
-        console.log(`📏 SVG converted image size: ${imageSizeKB}KB`)
-      }
-
-      // Record API usage
-      dispatch(incrementApiKeyUsage(apiKeyInfo.id))
-
-      const genAI = new GoogleGenerativeAI(apiKeyInfo.key)
-      const modelName = 'gemini-2.0-flash'
-      const model = genAI.getGenerativeModel({ model: modelName })
-
-      const titleMinWords = settings?.titleMinWords || 8
-      const titleMaxWords = settings?.titleMaxWords || 15
-      const keywordsMinCount = settings?.keywordsMinCount || 20
-      const keywordsMaxCount = settings?.keywordsMaxCount || 35
-      const descriptionMinWords = settings?.descriptionMinWords || 30
-      const descriptionMaxWords = settings?.descriptionMaxWords || 40
-      const keywordSettings = settings?.keywordSettings
-      const customization = settings?.customization
-      const titleCustomization = settings?.titleCustomization
-
-      // Determine keyword instruction based on settings
-      let keywordInstruction = 'Use single words or short phrases for keywords'
-      if (keywordSettings?.singleWord) {
-        keywordInstruction = 'Use ONLY single words for keywords (no phrases or compound words)'
-      } else if (keywordSettings?.doubleWord) {
-        keywordInstruction = 'Use ONLY two-word phrases for keywords (exactly 2 words each, no single words)'
-      } else if (keywordSettings?.mixed) {
-        keywordInstruction = 'Use a mix of single words and two-word phrases for keywords'
-      }
-
-      // Handle prohibited words
-      let prohibitedWordsInstruction = ''
-      if (customization?.prohibitedWords && customization.prohibitedWordsList.trim()) {
-        const prohibitedList = customization.prohibitedWordsList.split(',').map(w => w.trim()).filter(w => w)
-        if (prohibitedList.length > 0) {
-          prohibitedWordsInstruction = `\n- NEVER use these prohibited words: ${prohibitedList.join(', ')}`
-        }
-      }
-
-      // Handle transparent background and silhouette
-      let titleSuffix = ''
-      const additionalKeywords: string[] = []
-
-      if (customization?.transparentBackground) {
-        titleSuffix += ' on transparent background'
-        additionalKeywords.push('transparent background')
-      }
-
-      if (customization?.silhouette) {
-        titleSuffix += ' silhouette'
-        additionalKeywords.push('silhouette')
-      }
-
-      // Get title style instruction
-      let titleStyleInstruction = ''
-      if (titleCustomization?.titleStyle) {
-        switch (titleCustomization.titleStyle) {
-          case 'seo-optimized':
-            titleStyleInstruction = ' Focus on SEO-friendly, keyword-rich titles that would rank well in search engines.'
-            break
-          case 'descriptive':
-            titleStyleInstruction = ' Create detailed, descriptive titles that focus on visual elements and specific details.'
-            break
-          case 'short-concise':
-            titleStyleInstruction = ' Generate brief, punchy titles that are concise and to the point.'
-            break
-          case 'creative':
-            titleStyleInstruction = ' Use artistic and imaginative language to create creative, engaging titles.'
-            break
-          case 'commercial':
-            titleStyleInstruction = ' Focus on business and commercial aspects, suitable for professional use.'
-            break
-          case 'emotional':
-            titleStyleInstruction = ' Create titles that evoke emotions and feelings, connecting with the viewer.'
-            break
-          default:
-            titleStyleInstruction = ' Generate engaging, descriptive titles suitable for stock photography.'
-        }
-      }
-
-      // Adjust keywords count if we need to add special keywords
-      const adjustedKeywordsMinCount = Math.max(1, keywordsMinCount - additionalKeywords.length)
-      const adjustedKeywordsMaxCount = Math.max(adjustedKeywordsMinCount, keywordsMaxCount - additionalKeywords.length)
-
-      // Create file type specific prompt
-      let mediaTypeDescription = 'image'
-      let analysisInstructions = 'Focus on objects, colors, style, mood, and context visible in the image'
-
-      if (fileType === 'video') {
-        mediaTypeDescription = 'video frame (extracted from a video file)'
-        analysisInstructions = `This is a frame extracted from the video file "${filename}". Analyze what you see in this frame and generate metadata that represents the overall video content. Focus on subjects, actions, setting, style, colors, mood, and cinematography visible in this frame. Consider this frame as representative of the video's content`
-      } else if (fileType === 'vector') {
-        mediaTypeDescription = 'vector graphic (SVG or EPS file)'
-        analysisInstructions = 'Focus on the design elements, style, colors, shapes, and intended use of this vector graphic'
-
-        // For vectors, also analyze original content if available
-        if (originalData) {
-          analysisInstructions += '. Consider the vector file content and design elements'
-        }
-      }
-
-      let basePrompt = `Analyze this ${mediaTypeDescription} and provide metadata in the following exact format:
-
-Title: [A descriptive title between ${titleMinWords} and ${titleMaxWords} words${titleSuffix ? `, ending with "${titleSuffix.trim()}"` : ''}]
-Description: [A descriptive summary between ${descriptionMinWords} and ${descriptionMaxWords} words]
-Keywords: [Between ${adjustedKeywordsMinCount} and ${adjustedKeywordsMaxCount} relevant keywords separated by commas]
-
-STRICT REQUIREMENTS - MUST FOLLOW EXACTLY:
-- Title must be between ${titleMinWords} and ${titleMaxWords} words (not exactly, but within this range), descriptive and engaging, no extra characters, must be one sentence only like most stock agency ${mediaTypeDescription}s has like adobe stock${titleSuffix ? ` and must end with "${titleSuffix.trim()}"` : ''}${titleStyleInstruction}
-- Description must be between ${descriptionMinWords} and ${descriptionMaxWords} words (not exactly, but within this range), providing a comprehensive summary of the ${mediaTypeDescription} content
-- Keywords must be between ${adjustedKeywordsMinCount} and ${adjustedKeywordsMaxCount} items (not exactly, but within this range), all relevant to the ${mediaTypeDescription} content
-- ${analysisInstructions}
-- ${keywordInstruction}
-- Separate keywords with commas only${prohibitedWordsInstruction}
-- CRITICAL: Respect the word/keyword count ranges - generate content within the specified minimum and maximum limits
-
-Respond with only the title, description, and keywords in the specified format.`
-
-      // Add custom prompt if enabled
-      if (customization?.customPrompt && customization.customPromptText.trim()) {
-        basePrompt += `\n\nAdditional instructions: ${customization.customPromptText.trim()}`
-      }
-
-      const prompt = basePrompt
-
-      // For vector files, the imageData should already be the converted preview image
-      // processedImageData was already set above during compression check
-
-      // Enhanced validation for image data
+      
+      // Process image data similar to single image processing
       if (!processedImageData || !processedImageData.includes('data:image/')) {
         throw new Error(`Invalid image data format for ${filename}`)
       }
-
-      // Validate base64 data structure
+      
       const dataParts = processedImageData.split(',')
       if (dataParts.length !== 2 || !dataParts[1]) {
         throw new Error(`Malformed base64 image data for ${filename}`)
       }
-
-      // Improved MIME type detection from data URI
+      
       const headerPart = dataParts[0].toLowerCase()
-      let mimeType = 'image/png' // Default to PNG since we convert SVGs to PNG
-
-      if (headerPart.includes('image/png')) {
-        mimeType = 'image/png'
-      } else if (headerPart.includes('image/jpeg') || headerPart.includes('image/jpg')) {
+      let mimeType = 'image/png'
+      
+      if (headerPart.includes('image/jpeg') || headerPart.includes('image/jpg')) {
         mimeType = 'image/jpeg'
       } else if (headerPart.includes('image/webp')) {
         mimeType = 'image/webp'
       }
-
-      // For vector files that were converted, always use PNG
-      if (fileType === 'vector') {
-        mimeType = 'image/png'
-        console.log(`🎨 Vector file ${filename} using PNG format after conversion`)
-      }
-
-      // Additional validation for base64 data quality
-      const base64Data = dataParts[1]
-      if (base64Data.length < 100) {
-        throw new Error(`Image data too small for ${filename} - likely corrupted`)
-      }
-
-      // Test if base64 is valid
-      try {
-        atob(base64Data.substring(0, Math.min(100, base64Data.length)))
-      } catch {
-        throw new Error(`Invalid base64 encoding for ${filename}`)
-      }
-
-      console.log(`📸 Processing ${filename} with detected MIME type: ${mimeType}`)
-
-      const content: (string | Part)[] = [
-        prompt,
-        {
-          inlineData: {
-            mimeType: mimeType,
-            data: base64Data
-          }
+      
+      content.push({
+        inlineData: {
+          mimeType: mimeType,
+          data: dataParts[1]
         }
-      ]
+      })
+    }
 
-      // Add mandatory delay before API request to avoid rate limiting
-      const delayMs = 1000 + Math.random() * 2000 // 1-3 second delay
-      console.log(`⏳ Waiting ${delayMs.toFixed(0)}ms before API request for ${filename}`)
-      await wait(delayMs)
+    // Add adaptive delay and rate limiting
+     const delayMs = getProcessingDelay()
+     console.log(`⏳ Waiting ${delayMs.toFixed(0)}ms before batch API request for ${batch.length} images (${isLowEndDevice() ? 'low-end optimized' : 'standard'})`)
+     await wait(delayMs)
+     
+     // Additional yield for low-end devices to prevent UI blocking
+     if (isLowEndDevice()) {
+       await new Promise(resolve => setTimeout(resolve, 0))
+     }
 
-      // Rate limiting removed
+    const canMakeRequest = rateLimiter.canMakeRequest(apiKeyInfo.id)
+    console.log(`🔍 Rate limiter check for ${apiKeyInfo.name}: ${canMakeRequest ? 'ALLOWED' : 'BLOCKED'}`)
+    if (!canMakeRequest) {
+      throw new Error('Rate limit exceeded - waiting for next available slot')
+    }
 
-      console.log(`🚀 Making API request for ${filename} with key: ${apiKeyInfo.name}`)
-      const result = await model.generateContent(content)
-      const response = result.response
-      const text = response.text()
+    rateLimiter.recordRequest(apiKeyInfo.id)
 
-      if (!text || text.trim().length === 0) {
-        throw new Error('Empty response from Gemini API')
-      }
+    console.log(`🚀 Making batch API request for ${batch.length} images with key: ${apiKeyInfo.name}`)
+    const result = await model.generateContent(content)
+    const response = result.response
+    const text = response.text()
 
-      // Parse the response
-      const lines = text.split('\n').filter(line => line.trim())
+    if (!text || text.trim().length === 0) {
+      throw new Error('Empty response from Gemini API')
+    }
+
+    // Parse batch response
+    const results: MetadataResult[] = []
+    const imageBlocks = text.split(/IMAGE \d+:/i).filter(block => block.trim())
+    
+    for (let i = 0; i < batch.length; i++) {
+      const imageInput = batch[i]
+      const blockText = imageBlocks[i] || ''
+      
+      const lines = blockText.split('\n').filter(line => line.trim())
       let title = ''
       let description = ''
       let keywords: string[] = []
@@ -356,51 +240,27 @@ Respond with only the title, description, and keywords in the specified format.`
         }
       }
 
-      // Add additional keywords for special features
-      if (additionalKeywords.length > 0) {
-        keywords = [...keywords, ...additionalKeywords]
+      // Fallback if parsing failed
+      if (!title && !description && keywords.length === 0) {
+        title = `Image ${i + 1}`
+        description = `Generated description for ${imageInput.filename}`
+        keywords = ['image', 'generated', 'content']
       }
 
-      // Apply title customization (prefix/postfix)
-      if (titleCustomization) {
-        let finalTitle = title
-
-        // Add prefix
-        if (titleCustomization.customPrefix && titleCustomization.prefixText.trim()) {
-          finalTitle = `${titleCustomization.prefixText.trim()} ${finalTitle}`
-        }
-
-        // Add postfix
-        if (titleCustomization.customPostfix && titleCustomization.postfixText.trim()) {
-          finalTitle = `${finalTitle} ${titleCustomization.postfixText.trim()}`
-        }
-
-        title = finalTitle
-      }
-
-      // Validate response quality - if parsing failed or response is poor, throw error to retry
-      if (!title || title.includes('Generated title for')) {
-        throw new Error('Failed to generate proper title from API response')
-      }
-      if (keywords.length < 10) { // Expect at least 10 keywords for quality
-        throw new Error('Generated keywords are insufficient - likely poor API response')
-      }
-
-      return {
-        filename,
-        title,
-        description,
-        keywords
-      }
-
-    } catch (error) {
-      console.error(`Error generating metadata for ${filename} with API key ${apiKeyInfo.name}:`, error)
-
-      // Always throw the error - let the outer retry logic handle it
-      // This ensures we don't fall back to generated metadata too early
-      throw error
+      results.push({
+           title: title || `Generated title for ${imageInput.filename}`,
+           description: description || `Generated description for ${imageInput.filename}`,
+           keywords: keywords.length > 0 ? keywords : ['image', 'generated'],
+           filename: imageInput.filename
+         })
     }
+
+    return results
   }, [apiKeys, dispatch])
+
+  // generateMetadataForSingleImage function removed - now using batch processing only
+
+
 
   const generateMetadataWithOpenAI = useCallback(async (
     input: ImageInput[],
@@ -443,7 +303,7 @@ Respond with only the title, description, and keywords in the specified format.`
 
     setIsLoading(true)
     setError(null)
-    setGenerationStartTime(Date.now())
+    setGenerationStartTime(null) // Will be set when first metadata is generated
     stopRequestedRef.current = false
 
     const results: MetadataResult[] = []
@@ -487,6 +347,15 @@ Respond with only the title, description, and keywords in the specified format.`
         try {
           const result = await openaiService.generateMetadataForSingleImage(imageInput, settings)
           results.push(result)
+
+          // Start timer on first successful metadata generation
+          setGenerationStartTime(prev => {
+            if (prev === null) {
+              console.log('⏱️ Starting timer - first metadata generated (OpenAI)')
+              return Date.now()
+            }
+            return prev
+          })
 
           // Update progress
           setProcessingProgress(prev => prev ? {
@@ -558,467 +427,9 @@ Respond with only the title, description, and keywords in the specified format.`
     }
   }, [openaiApiKey, isOpenaiApiKeyValid])
 
-  const generateMetadataWithGroq = useCallback(async (
-    input: ImageInput[],
-    onMetadataGenerated?: (result: MetadataResult) => void,
-    settings?: {
-      titleWords: number;
-      titleMinWords?: number;
-      titleMaxWords?: number;
-      keywordsCount: number;
-      keywordsMinCount?: number;
-      keywordsMaxCount?: number;
-      descriptionWords: number;
-      descriptionMinWords?: number;
-      descriptionMaxWords?: number;
-      keywordSettings?: {
-        singleWord: boolean;
-        doubleWord: boolean;
-        mixed: boolean;
-      }
-      customization?: {
-        customPrompt: boolean;
-        customPromptText: string;
-        prohibitedWords: boolean;
-        prohibitedWordsList: string;
-        transparentBackground: boolean;
-        silhouette: boolean;
-      }
-      titleCustomization?: {
-        titleStyle: string;
-        customPrefix: boolean;
-        prefixText: string;
-        customPostfix: boolean;
-        postfixText: string;
-      }
-    }
-  ): Promise<MetadataResult[]> => {
-    if (!groqApiKey || !isGroqApiKeyValid) {
-      throw new Error('Groq API key is not valid. Please check your API key in Settings.')
-    }
 
-    setIsLoading(true)
-    setError(null)
-    setGenerationStartTime(Date.now())
-    stopRequestedRef.current = false
 
-    const results: MetadataResult[] = []
-    const groqService = new GroqMetadataService(groqApiKey)
 
-    // Initialize processing progress
-    const initialProgress: ProcessingProgress = {
-      total: input.length,
-      completed: 0,
-      currentFilename: null,
-      currentApiKeyId: 'groq',
-      processingStats: {
-        'groq': {
-          processed: 0,
-          errors: 0,
-          lastUsed: Date.now()
-        }
-      }
-    }
-
-    setProcessingProgress(initialProgress)
-
-    try {
-      console.log(`🚀 Starting Groq metadata generation for ${input.length} images`)
-
-      for (let i = 0; i < input.length; i++) {
-        if (stopRequestedRef.current) {
-          console.log('🛑 Generation stopped by user')
-          break
-        }
-
-        const imageInput = input[i]
-
-        // Update progress
-        setProcessingProgress(prev => prev ? {
-          ...prev,
-          currentFilename: imageInput.filename,
-          currentApiKeyId: 'groq'
-        } : null)
-
-        try {
-          const result = await groqService.generateMetadataForSingleImage(imageInput, settings)
-          results.push(result)
-
-          // Update progress
-          setProcessingProgress(prev => prev ? {
-            ...prev,
-            completed: prev.completed + 1,
-            processingStats: {
-              ...prev.processingStats,
-              'groq': {
-                ...prev.processingStats['groq'],
-                processed: prev.processingStats['groq'].processed + 1,
-                lastUsed: Date.now()
-              }
-            }
-          } : null)
-
-          // Call the callback if provided
-          if (onMetadataGenerated) {
-            onMetadataGenerated(result)
-          }
-
-        } catch (error) {
-          console.error(`❌ Groq generation failed for ${imageInput.filename}:`, error)
-
-          const failedResult: MetadataResult = {
-            filename: imageInput.filename,
-            title: '',
-            description: '',
-            keywords: [],
-            failed: true
-          }
-
-          results.push(failedResult)
-
-          // Update error stats
-          setProcessingProgress(prev => prev ? {
-            ...prev,
-            completed: prev.completed + 1,
-            processingStats: {
-              ...prev.processingStats,
-              'groq': {
-                ...prev.processingStats['groq'],
-                errors: prev.processingStats['groq'].errors + 1,
-                lastUsed: Date.now()
-              }
-            }
-          } : null)
-
-          if (onMetadataGenerated) {
-            onMetadataGenerated(failedResult)
-          }
-        }
-      }
-
-      console.log(`✅ Groq metadata generation completed. ${results.filter(r => !r.failed).length}/${results.length} successful`)
-
-      setIsLoading(false)
-      setError(null)
-
-      return results
-
-    } catch (error) {
-      console.error('❌ Groq metadata generation error:', error)
-      setIsLoading(false)
-      setError(error instanceof Error ? error.message : 'Failed to generate metadata with Groq')
-      throw error
-    } finally {
-      // Clear progress after a delay
-      setTimeout(() => setProcessingProgress(null), 2000)
-    }
-  }, [groqApiKey, isGroqApiKeyValid])
-
-  const generateMetadataWithOpenRouter = useCallback(async (
-    input: ImageInput[],
-    onMetadataGenerated?: (result: MetadataResult) => void,
-    settings?: {
-      titleWords: number;
-      titleMinWords?: number;
-      titleMaxWords?: number;
-      keywordsCount: number;
-      keywordsMinCount?: number;
-      keywordsMaxCount?: number;
-      descriptionWords: number;
-      descriptionMinWords?: number;
-      descriptionMaxWords?: number;
-      keywordSettings?: {
-        singleWord: boolean;
-        doubleWord: boolean;
-        mixed: boolean;
-      }
-      customization?: {
-        customPrompt: boolean;
-        customPromptText: string;
-        prohibitedWords: boolean;
-        prohibitedWordsList: string;
-        transparentBackground: boolean;
-        silhouette: boolean;
-      }
-      titleCustomization?: {
-        titleStyle: string;
-        customPrefix: boolean;
-        prefixText: string;
-        customPostfix: boolean;
-        postfixText: string;
-      }
-    }
-  ): Promise<MetadataResult[]> => {
-    if (!openrouterApiKey || !isOpenrouterApiKeyValid) {
-      throw new Error('OpenRouter API key is not valid. Please check your API key in Settings.')
-    }
-
-    setIsLoading(true)
-    setError(null)
-    setGenerationStartTime(Date.now())
-    stopRequestedRef.current = false
-
-    const results: MetadataResult[] = []
-
-    // Use multiple OpenRouter API keys if available, otherwise fall back to single key
-    const validOpenrouterKeys = openrouterApiKeys.filter(key => key.isValid)
-    const useMultipleKeys = validOpenrouterKeys.length > 0
-
-    let openrouterService: OpenRouterMetadataService
-
-    if (useMultipleKeys) {
-      console.log(`🚀 Using ${validOpenrouterKeys.length} OpenRouter API keys for round-robin distribution`)
-      openrouterService = new OpenRouterMetadataService(validOpenrouterKeys[0].key, openrouterSelectedModel)
-    } else {
-      console.log('🚀 Using single OpenRouter API key')
-      openrouterService = new OpenRouterMetadataService(openrouterApiKey, openrouterSelectedModel)
-    }
-
-    // Initialize processing progress
-    const initialProgress: ProcessingProgress = {
-      total: input.length,
-      completed: 0,
-      currentFilename: null,
-      currentApiKeyId: useMultipleKeys ? validOpenrouterKeys[0].id : 'openrouter',
-      processingStats: useMultipleKeys
-        ? validOpenrouterKeys.reduce((stats, key) => ({
-            ...stats,
-            [key.id]: {
-              processed: 0,
-              errors: 0,
-              lastUsed: Date.now()
-            }
-          }), {})
-        : {
-            'openrouter': {
-              processed: 0,
-              errors: 0,
-              lastUsed: Date.now()
-            }
-          }
-    }
-
-    setProcessingProgress(initialProgress)
-
-    try {
-      console.log(`🚀 Starting OpenRouter metadata generation for ${input.length} images`)
-
-      if (useMultipleKeys) {
-        console.log(`🔄 Using round-robin processing with ${validOpenrouterKeys.length} OpenRouter API keys`)
-        let currentKeyIndex = 0
-
-        // Process images sequentially with round-robin key selection
-        for (let i = 0; i < input.length; i++) {
-          if (stopRequestedRef.current) {
-            console.log('🛑 Generation stopped by user')
-            break
-          }
-
-          const imageInput = input[i]
-
-          // Get next available API key using round-robin
-          let currentKey = validOpenrouterKeys[currentKeyIndex]
-          let attempts = 0
-
-          // Find an available key (not rate limited)
-          while (!openrouterRateLimiter.canMakeRequest(currentKey.id, openrouterSelectedModel) && attempts < validOpenrouterKeys.length) {
-            currentKeyIndex = (currentKeyIndex + 1) % validOpenrouterKeys.length
-            currentKey = validOpenrouterKeys[currentKeyIndex]
-            attempts++
-          }
-
-          // If all keys are rate limited, wait for the current one
-          if (!openrouterRateLimiter.canMakeRequest(currentKey.id, openrouterSelectedModel)) {
-            console.log(`⏳ All OpenRouter keys rate limited, waiting for ${currentKey.name}...`)
-            const waitTime = openrouterRateLimiter.getWaitTimeUntilNextAvailable([currentKey], openrouterSelectedModel)
-            if (waitTime > 0) {
-              await wait(waitTime)
-            }
-          }
-
-          console.log(`📤 Using OpenRouter API key: ${currentKey.name} for ${imageInput.filename}`)
-
-          // Move to next key for next request (round-robin)
-          currentKeyIndex = (currentKeyIndex + 1) % validOpenrouterKeys.length
-
-          // Update progress
-          setProcessingProgress(prev => prev ? {
-            ...prev,
-            currentFilename: imageInput.filename,
-            currentApiKeyId: currentKey.id
-          } : null)
-
-          try {
-            // Record the request for rate limiting
-            openrouterRateLimiter.recordRequest(currentKey.id, openrouterSelectedModel)
-
-            // Update the service to use the current API key
-            openrouterService.updateApiKey(currentKey.key)
-
-            const result = await openrouterService.generateMetadataForSingleImage(imageInput, settings)
-            results.push(result)
-
-            // Update progress and API key usage
-            setProcessingProgress(prev => prev ? {
-              ...prev,
-              completed: prev.completed + 1,
-              processingStats: {
-                ...prev.processingStats,
-                [currentKey.id]: {
-                  ...prev.processingStats[currentKey.id],
-                  processed: prev.processingStats[currentKey.id].processed + 1,
-                  lastUsed: Date.now()
-                }
-              }
-            } : null)
-
-            // Update API key usage in Redux store
-            dispatch(incrementOpenrouterApiKeyUsage(currentKey.id))
-
-            // Call the callback if provided
-            if (onMetadataGenerated) {
-              onMetadataGenerated(result)
-            }
-
-            console.log(`✅ Successfully generated metadata for ${imageInput.filename} using ${currentKey.name}`)
-
-          } catch (error) {
-            console.error(`❌ OpenRouter generation failed for ${imageInput.filename}:`, error)
-
-            const failedResult: MetadataResult = {
-              filename: imageInput.filename,
-              title: '',
-              description: '',
-              keywords: [],
-              failed: true
-            }
-
-            results.push(failedResult)
-
-            // Update error stats
-            setProcessingProgress(prev => prev ? {
-              ...prev,
-              completed: prev.completed + 1,
-              processingStats: {
-                ...prev.processingStats,
-                [currentKey.id]: {
-                  ...prev.processingStats[currentKey.id],
-                  errors: prev.processingStats[currentKey.id].errors + 1,
-                  lastUsed: Date.now()
-                }
-              }
-            } : null)
-
-            if (onMetadataGenerated) {
-              onMetadataGenerated(failedResult)
-            }
-          }
-        }
-      } else {
-        // Single key processing (original logic)
-        console.log('🚀 Using single OpenRouter API key')
-
-        for (let i = 0; i < input.length; i++) {
-          if (stopRequestedRef.current) {
-            console.log('🛑 Generation stopped by user')
-            break
-          }
-
-          const imageInput = input[i]
-
-          // Check rate limiting for single key
-          if (!openrouterRateLimiter.canMakeRequest('openrouter', openrouterSelectedModel)) {
-            const waitTime = openrouterRateLimiter.getWaitTimeUntilNextAvailable([{ id: 'openrouter', key: '', isValid: true, isValidating: false, validationError: null, requestCount: 0, lastRequestTime: 0, name: 'OpenRouter' }], openrouterSelectedModel)
-            if (waitTime > 0) {
-              console.log(`⏳ OpenRouter rate limited, waiting ${waitTime}ms...`)
-              await wait(waitTime)
-            }
-          }
-
-          // Update progress
-          setProcessingProgress(prev => prev ? {
-            ...prev,
-            currentFilename: imageInput.filename,
-            currentApiKeyId: 'openrouter'
-          } : null)
-
-          try {
-            // Record the request for rate limiting
-            openrouterRateLimiter.recordRequest('openrouter', openrouterSelectedModel)
-
-            const result = await openrouterService.generateMetadataForSingleImage(imageInput, settings)
-            results.push(result)
-
-            // Update progress
-            setProcessingProgress(prev => prev ? {
-              ...prev,
-              completed: prev.completed + 1,
-              processingStats: {
-                ...prev.processingStats,
-                'openrouter': {
-                  ...prev.processingStats['openrouter'],
-                  processed: prev.processingStats['openrouter'].processed + 1,
-                  lastUsed: Date.now()
-                }
-              }
-            } : null)
-
-            // Call the callback if provided
-            if (onMetadataGenerated) {
-              onMetadataGenerated(result)
-            }
-
-          } catch (error) {
-            console.error(`❌ OpenRouter generation failed for ${imageInput.filename}:`, error)
-
-            const failedResult: MetadataResult = {
-              filename: imageInput.filename,
-              title: '',
-              description: '',
-              keywords: [],
-              failed: true
-            }
-
-            results.push(failedResult)
-
-            // Update error stats
-            setProcessingProgress(prev => prev ? {
-              ...prev,
-              completed: prev.completed + 1,
-              processingStats: {
-                ...prev.processingStats,
-                'openrouter': {
-                  ...prev.processingStats['openrouter'],
-                  errors: prev.processingStats['openrouter'].errors + 1,
-                  lastUsed: Date.now()
-                }
-              }
-            } : null)
-
-            if (onMetadataGenerated) {
-              onMetadataGenerated(failedResult)
-            }
-          }
-        }
-      }
-
-      console.log(`✅ OpenRouter metadata generation completed. ${results.filter(r => !r.failed).length}/${results.length} successful`)
-
-      setIsLoading(false)
-      setError(null)
-
-      return results
-
-    } catch (error) {
-      console.error('❌ OpenRouter metadata generation error:', error)
-      setIsLoading(false)
-      setError(error instanceof Error ? error.message : 'Failed to generate metadata with OpenRouter')
-      throw error
-    } finally {
-      // Clear progress after a delay
-      setTimeout(() => setProcessingProgress(null), 2000)
-    }
-  }, [openrouterApiKey, isOpenrouterApiKeyValid])
 
   const generateMetadata = useCallback(async (
     input: ImageInput[],
@@ -1058,14 +469,16 @@ Respond with only the title, description, and keywords in the specified format.`
     // Check which provider to use
     if (metadataProvider === 'openai') {
       return generateMetadataWithOpenAI(input, onMetadataGenerated, settings)
-    } else if (metadataProvider === 'groq') {
-      return generateMetadataWithGroq(input, onMetadataGenerated, settings)
-    } else if (metadataProvider === 'openrouter') {
-      return generateMetadataWithOpenRouter(input, onMetadataGenerated, settings)
     }
 
     // Default to Gemini (existing logic)
     const validApiKeys = apiKeys.filter(key => key.isValid)
+    console.log(`🔍 Found ${validApiKeys.length} valid API keys out of ${apiKeys.length} total keys`)
+    console.log('Valid API keys:', validApiKeys.map(k => ({ name: k.name, id: k.id, isValid: k.isValid })))
+    
+    // Reset rate limiter to clear any stuck states
+    rateLimiter.resetRoundRobin()
+    console.log('🔄 Rate limiter reset completed')
 
     if (validApiKeys.length === 0) {
       // Fallback to legacy single API key if no valid multiple keys
@@ -1077,22 +490,22 @@ Respond with only the title, description, and keywords in the specified format.`
       const legacyKey: ApiKeyInfo = {
         id: 'legacy',
         key: apiKey,
-        isValid: isApiKeyValid,
+        name: 'Legacy API Key',
+        isValid: true,
         isValidating: false,
         validationError: null,
         requestCount: 0,
-        lastRequestTime: Date.now(),
-        name: 'Legacy API Key'
+        lastRequestTime: 0
       }
       validApiKeys.push(legacyKey)
     }
 
     setIsLoading(true)
     setError(null)
-    setGenerationStartTime(Date.now()) // Start timer
+    setGenerationStartTime(null) // Will be set when first metadata is generated
     stopRequestedRef.current = false // Reset stop flag for new generation
 
-    // Initialize processing progress
+    // Initialize processing progress with stats for each API key
     const initialProgress: ProcessingProgress = {
       total: input.length,
       completed: 0,
@@ -1101,7 +514,6 @@ Respond with only the title, description, and keywords in the specified format.`
       processingStats: {}
     }
 
-    // Initialize stats for each API key
     validApiKeys.forEach(apiKey => {
       initialProgress.processingStats[apiKey.id] = {
         processed: 0,
@@ -1110,181 +522,321 @@ Respond with only the title, description, and keywords in the specified format.`
       }
     })
 
-    console.log(`🚀 Starting metadata generation with ${validApiKeys.length} API keys:`, validApiKeys.map(k => k.name))
-    const optimalParallelLimit = getOptimalParallelLimit(validApiKeys)
-    console.log(`📊 Optimal parallel limit: ${optimalParallelLimit} (based on ${validApiKeys.length} keys with current capacity)`)
-
-    console.log(`🚀 Starting metadata generation with ${validApiKeys.length} API keys:`, validApiKeys.map(k => k.name))
+    console.log(`🚀 Starting parallel metadata generation with ${validApiKeys.length} API keys:`, validApiKeys.map(k => k.name))
+    console.log(`📊 Processing ${input.length} images total`)
+    console.log('🎯 Current metadata provider:', metadataProvider)
+    
+    // Use parallel processing with all available API keys
+    const BATCH_SIZE = getOptimalBatchSize() // Adaptive batch size based on device capabilities
+    const MAX_PARALLEL_BATCHES = isLowEndDevice() ? Math.min(validApiKeys.length, 2) : validApiKeys.length // Limit concurrent batches on low-end devices
+    
+    console.log(`⚡ Using adaptive batch processing: ${MAX_PARALLEL_BATCHES} concurrent batches of ${BATCH_SIZE} images each`)
+    console.log(`🖥️ Device capabilities: ${isLowEndDevice() ? 'Low-end (optimized)' : 'High-end (standard)'}`)
+    console.log(`💾 Memory: ${(navigator as any).deviceMemory || 'unknown'}GB, CPU cores: ${navigator.hardwareConcurrency || 'unknown'}`)
 
     setProcessingProgress(initialProgress)
 
     // Create abort controller for this operation
     abortControllerRef.current = new AbortController()
 
-    const results: MetadataResult[] = []
-    let currentIndex = 0
-
+    const results: MetadataResult[] = new Array(input.length).fill(null)
+    
     try {
-      // Process images with controlled concurrency
-      const processNextBatch = async (): Promise<void> => {
-        // Check if stop was requested
-        if (stopRequestedRef.current) {
-          console.log('🛑 Stop detected - halting batch processing')
-          return
-        }
-
-        const batch: Promise<void>[] = []
-
-        // Create batch ensuring each request gets a different API key in round-robin order
-        const parallelLimit = optimalParallelLimit
-
-        // Process images with pre-assigned API keys for round-robin distribution
-        for (let i = 0; i < parallelLimit && currentIndex < input.length; i++) {
-          // Check if stop was requested before processing each image
-          if (stopRequestedRef.current) {
-            console.log('🛑 Stop detected - halting image processing loop')
-            break
-          }
-
-          const imageIndex = currentIndex++
-          const imageInput = input[imageIndex]
-
-          // Get next available API key using round-robin
-          const availableApiKey = validApiKeys[currentIndex % validApiKeys.length]
-
-          if (availableApiKey) {
-            console.log(`📤 Assigning ${imageInput.filename} to ${availableApiKey.name} (round-robin distribution)`)
-
-            const processPromise = (async () => {
-              let retryCount = 0
-              let lastError: Error | null = null
-
-              while (retryCount <= MAX_RETRIES) {
-                // Check if stop was requested before each retry
-                if (stopRequestedRef.current) {
-                  console.log(`🛑 Stop detected - halting processing for ${imageInput.filename}`)
-                  return
-                }
-
-                try {
-                  // Get current API key (might change on retry)
-                  const currentApiKey = availableApiKey
-
-                  // If this is a retry, wait before retrying
-                  if (retryCount > 0) {
-                    console.log(`⏳ Retry ${retryCount} for ${imageInput.filename} - waiting before retry with ${currentApiKey.name}`)
-                    await wait(RETRY_DELAY * retryCount)
-                  }
-
-                  // Update progress
-                  setProcessingProgress(prev => prev ? {
-                    ...prev,
-                    currentFilename: imageInput.filename,
-                    currentApiKeyId: currentApiKey.id
-                  } : null)
-
-                  // Generate metadata
-                  const result = await generateMetadataForSingleImage(imageInput, currentApiKey, settings)
-                  results[imageIndex] = result
-
-                  // Call the real-time callback immediately when metadata is generated
-                  if (onMetadataGenerated) {
-                    onMetadataGenerated(result)
-                  }
-
-                  // Update success stats
-                  setProcessingProgress(prev => {
-                    if (!prev) return null
-
-                    const newStats = { ...prev.processingStats }
-                    newStats[currentApiKey.id] = {
-                      ...newStats[currentApiKey.id],
-                      processed: newStats[currentApiKey.id].processed + 1,
-                      lastUsed: Date.now()
-                    }
-
-                    return {
-                      ...prev,
-                      completed: prev.completed + 1,
-                      processingStats: newStats
-                    }
-                  })
-
-                  console.log(`✅ Successfully generated metadata for ${imageInput.filename} using ${currentApiKey.name}`)
-                  return // Success - exit retry loop
-
-                } catch (error) {
-                  lastError = error instanceof Error ? error : new Error(String(error))
-                  retryCount++
-
-                  // Log specific error types for debugging
-                  const errorMessage = lastError.message.toLowerCase()
-                  const isImageValidationError = errorMessage.includes('provided image is not valid') ||
-                    errorMessage.includes('invalid image') ||
-                    errorMessage.includes('image format')
-
-                  if (isImageValidationError) {
-                    console.error(`🎨 Image validation issue for ${imageInput.filename}: ${lastError.message}`)
-                    // Continue retrying - no fallback metadata
-                  }
-
-                  console.error(`❌ Attempt ${retryCount} failed for ${imageInput.filename}:`, lastError.message)
-
-                  // Update error stats only for the API key that actually failed
-                  setProcessingProgress(prev => {
-                    if (!prev) return null
-
-                    const newStats = { ...prev.processingStats }
-                    if (newStats[availableApiKey.id]) {
-                      newStats[availableApiKey.id] = {
-                        ...newStats[availableApiKey.id],
-                        errors: newStats[availableApiKey.id].errors + 1
-                      }
-                    }
-
-                    return {
-                      ...prev,
-                      processingStats: newStats
-                    }
-                  })
-
-                  // If we've exhausted all retries, mark as failed (no fallback metadata)
-                  if (retryCount > MAX_RETRIES) {
-                    console.error(`❌ All retries exhausted for ${imageInput.filename} - marking as failed`)
-
-                    // Don't add any result - let it remain undefined to indicate failure
-                    // This will be filtered out later and the UI will show an error indicator
-
-                    return
-                  }
-
-                  // Wait before next retry (progressive backoff)
-                  if (retryCount <= MAX_RETRIES) {
-                    const waitTime = RETRY_DELAY * Math.pow(2, retryCount - 1) // Exponential backoff
-                    console.log(`⏳ Waiting ${waitTime}ms before retry ${retryCount}`)
-                    await wait(waitTime)
-                  }
-                }
-              }
-            })()
-
-            batch.push(processPromise)
-          }
-        }
-
-        // Wait for current batch to complete
-        if (batch.length > 0) {
-          await Promise.all(batch)
-        }
-
-        // Continue with next batch if there are more images
-        if (currentIndex < input.length) {
-          await processNextBatch()
-        }
+      // Create batches of images
+      const imageBatches: ImageInput[][] = []
+      for (let i = 0; i < input.length; i += BATCH_SIZE) {
+        imageBatches.push(input.slice(i, i + BATCH_SIZE))
       }
-
-      // Start processing
-      await processNextBatch()
+      
+      console.log(`📦 Created ${imageBatches.length} batches for processing`)
+      
+      // Process all batches in parallel using all available API keys
+      const batchPromises: Promise<void>[] = []
+      
+      for (let batchIndex = 0; batchIndex < imageBatches.length; batchIndex++) {
+        const batch = imageBatches[batchIndex]
+        const apiKey = validApiKeys[batchIndex % validApiKeys.length] // Round-robin API key assignment
+        
+        const processBatchWithRetry = async (): Promise<void> => {
+          if (stopRequestedRef.current) return
+          
+          console.log(`📸 Processing batch ${batchIndex + 1}/${imageBatches.length} with ${batch.length} images using ${apiKey.name}`)
+          
+          // Update progress
+          setProcessingProgress(prev => prev ? {
+            ...prev,
+            currentFilename: `Batch ${batchIndex + 1} (${batch.length} images)`,
+            currentApiKeyId: apiKey.id
+          } : null)
+          
+          let retryCount = 0
+          
+          while (retryCount <= MAX_RETRIES) {
+            if (stopRequestedRef.current) return
+            
+            try {
+              console.log(`🔄 Batch ${batchIndex + 1} attempt ${retryCount + 1} with ${apiKey.name}`)
+              
+              const batchResults = await generateMetadataForBatch(batch, apiKey, settings)
+              
+              // Store results
+               batch.forEach((_, localIndex) => {
+                 const globalIndex = batchIndex * BATCH_SIZE + localIndex
+                 if (globalIndex < input.length) {
+                   results[globalIndex] = batchResults[localIndex]
+                   
+                   // Call real-time callback
+                   if (onMetadataGenerated) {
+                     onMetadataGenerated(batchResults[localIndex])
+                   }
+                 }
+               })
+              
+              // Start timer on first successful metadata generation
+              setGenerationStartTime(prev => {
+                if (prev === null) {
+                  console.log('⏱️ Starting timer - first batch processed')
+                  return Date.now()
+                }
+                return prev
+              })
+              
+              // Update success stats for the entire batch with throttling for low-end devices
+              const shouldUpdateProgress = !isLowEndDevice() || (Date.now() - (window as any).lastProgressUpdate || 0) > 1000
+              if (shouldUpdateProgress) {
+                (window as any).lastProgressUpdate = Date.now()
+                
+                setProcessingProgress(prev => {
+                  if (!prev) return null
+                  
+                  const newStats = { ...prev.processingStats }
+                  newStats[apiKey.id] = {
+                    ...newStats[apiKey.id],
+                    processed: newStats[apiKey.id].processed + batch.length,
+                    lastUsed: Date.now()
+                  }
+                  
+                  return {
+                    ...prev,
+                    completed: prev.completed + batch.length,
+                    processingStats: newStats
+                  }
+                })
+              }
+              
+              // Force garbage collection on low-end devices
+              if (isLowEndDevice() && (window as any).gc) {
+                (window as any).gc()
+              }
+              
+              console.log(`✅ SUCCESS: Batch ${batchIndex + 1} (${batch.length} images) processed with ${apiKey.name}`)
+              return // Success - exit retry loop
+              
+            } catch (error) {
+              retryCount++
+              console.error(`❌ Batch ${batchIndex + 1} attempt ${retryCount} failed with ${apiKey.name}:`, error)
+              
+              // Update error stats
+              setProcessingProgress(prev => {
+                if (!prev) return null
+                
+                const newStats = { ...prev.processingStats }
+                newStats[apiKey.id] = {
+                  ...newStats[apiKey.id],
+                  errors: newStats[apiKey.id].errors + 1
+                }
+                
+                return {
+                  ...prev,
+                  processingStats: newStats
+                }
+              })
+              
+              if (retryCount <= MAX_RETRIES) {
+                let waitTime: number
+                
+                if (isRateLimitError(error)) {
+                  // Use exponential backoff for rate limit errors
+                  waitTime = getExponentialBackoffDelay(retryCount - 1)
+                  console.log(`⏳ Rate limit detected - waiting ${waitTime.toFixed(0)}ms before batch retry ${retryCount} (exponential backoff)`)
+                } else {
+                  // Use standard delay for other errors
+                  waitTime = RETRY_DELAY * retryCount
+                  console.log(`⏳ Waiting ${waitTime}ms before batch retry ${retryCount}`)
+                }
+                
+                await wait(waitTime)
+              }
+            }
+          }
+          
+          console.error(`❌ CRITICAL: All retries exhausted for batch ${batchIndex + 1} with ${apiKey.name}`)
+          
+          // Try with other API keys if this one failed completely
+          for (let fallbackKeyIndex = 0; fallbackKeyIndex < validApiKeys.length; fallbackKeyIndex++) {
+            const fallbackKey = validApiKeys[fallbackKeyIndex]
+            if (fallbackKey.id === apiKey.id) continue // Skip the already failed key
+            
+            console.log(`🔄 Trying batch ${batchIndex + 1} with fallback API key: ${fallbackKey.name}`)
+            
+            try {
+              const fallbackResults = await generateMetadataForBatch(batch, fallbackKey, settings)
+              
+              // Store results from fallback key
+              batch.forEach((_, localIndex) => {
+                const globalIndex = batchIndex * BATCH_SIZE + localIndex
+                if (globalIndex < input.length) {
+                  results[globalIndex] = fallbackResults[localIndex]
+                  
+                  // Call real-time callback
+                  if (onMetadataGenerated) {
+                    onMetadataGenerated(fallbackResults[localIndex])
+                  }
+                }
+              })
+              
+              // Update success stats for fallback key
+              setProcessingProgress(prev => {
+                if (!prev) return null
+                
+                const newStats = { ...prev.processingStats }
+                newStats[fallbackKey.id] = {
+                  ...newStats[fallbackKey.id],
+                  processed: newStats[fallbackKey.id].processed + batch.length,
+                  lastUsed: Date.now()
+                }
+                
+                return {
+                  ...prev,
+                  completed: prev.completed + batch.length,
+                  processingStats: newStats
+                }
+              })
+              
+              console.log(`✅ FALLBACK SUCCESS: Batch ${batchIndex + 1} processed with ${fallbackKey.name}`)
+              return // Success with fallback key
+              
+            } catch (fallbackError) {
+               console.error(`❌ Fallback failed for batch ${batchIndex + 1} with ${fallbackKey.name}:`, fallbackError)
+               
+               // Add delay for rate limit errors even in fallback
+               if (isRateLimitError(fallbackError)) {
+                 const backoffDelay = getExponentialBackoffDelay(fallbackKeyIndex)
+                 console.log(`⏳ Rate limit in fallback - waiting ${backoffDelay.toFixed(0)}ms before next fallback key`)
+                 await wait(backoffDelay)
+               }
+             }
+          }
+          
+          console.error(`❌ FINAL FAILURE: Batch ${batchIndex + 1} failed with all ${validApiKeys.length} API keys`)
+        }
+        
+        batchPromises.push(processBatchWithRetry())
+        
+        // Adaptive delay between batch starts to avoid overwhelming the API and maintain UI responsiveness
+         if (batchIndex < imageBatches.length - 1) {
+           const delay = isLowEndDevice() ? 1000 : 500 // Longer delay for low-end devices
+           await wait(delay)
+           
+           // Yield to main thread for UI updates on low-end devices
+           if (isLowEndDevice() && batchIndex % 2 === 0) {
+             await new Promise(resolve => setTimeout(resolve, 0)) // Yield to event loop
+           }
+         }
+      }
+      
+      // Wait for all batches to complete
+      await Promise.all(batchPromises)
+      
+      console.log(`🎉 All batch processing completed - ${imageBatches.length} batches processed`)
+       
+       // Check for any failed images and retry them individually with all API keys
+       const failedIndices: number[] = []
+       for (let i = 0; i < results.length; i++) {
+         if (!results[i]) {
+           failedIndices.push(i)
+         }
+       }
+       
+       if (failedIndices.length > 0) {
+         console.log(`🔄 Found ${failedIndices.length} failed images, retrying individually with all API keys`)
+         
+         for (const failedIndex of failedIndices) {
+            const imageInput = input[failedIndex]
+            console.log(`🔄 Retrying individual image: ${imageInput.filename}`)
+            
+            // Yield to main thread before processing each failed image on low-end devices
+            if (isLowEndDevice()) {
+              await new Promise(resolve => setTimeout(resolve, 100))
+            }
+            
+            // Try each API key for this individual image
+            for (const retryApiKey of validApiKeys) {
+              try {
+                console.log(`🔄 Individual retry for ${imageInput.filename} with ${retryApiKey.name}`)
+                
+                // Create single-image batch
+                const singleImageBatch = [imageInput]
+                const singleResults = await generateMetadataForBatch(singleImageBatch, retryApiKey, settings)
+               
+               if (singleResults && singleResults[0]) {
+                 results[failedIndex] = singleResults[0]
+                 
+                 // Call real-time callback
+                 if (onMetadataGenerated) {
+                   onMetadataGenerated(singleResults[0])
+                 }
+                 
+                 // Update progress
+                 setProcessingProgress(prev => {
+                   if (!prev) return null
+                   
+                   const newStats = { ...prev.processingStats }
+                   newStats[retryApiKey.id] = {
+                     ...newStats[retryApiKey.id],
+                     processed: newStats[retryApiKey.id].processed + 1,
+                     lastUsed: Date.now()
+                   }
+                   
+                   return {
+                     ...prev,
+                     completed: prev.completed + 1,
+                     processingStats: newStats
+                   }
+                 })
+                 
+                 console.log(`✅ Individual retry SUCCESS: ${imageInput.filename} with ${retryApiKey.name}`)
+                 break // Success - move to next failed image
+               }
+             } catch (retryError) {
+                 console.error(`❌ Individual retry failed for ${imageInput.filename} with ${retryApiKey.name}:`, retryError)
+                 
+                 // Add exponential backoff for rate limit errors in individual retries
+                 if (isRateLimitError(retryError)) {
+                   const backoffDelay = getExponentialBackoffDelay(validApiKeys.indexOf(retryApiKey))
+                   console.log(`⏳ Rate limit in individual retry - waiting ${backoffDelay.toFixed(0)}ms before next API key`)
+                   await wait(backoffDelay)
+                 }
+               }
+           }
+           
+           // If still failed after all API keys, create a fallback result
+           if (!results[failedIndex]) {
+             console.log(`⚠️ Creating fallback metadata for ${imageInput.filename}`)
+             results[failedIndex] = {
+               title: `Generated title for ${imageInput.filename}`,
+               description: `Generated description for ${imageInput.filename}`,
+               keywords: ['image', 'generated', 'fallback'],
+               filename: imageInput.filename,
+               failed: true
+             }
+             
+             if (onMetadataGenerated) {
+               onMetadataGenerated(results[failedIndex])
+             }
+           }
+         }
+       }
 
       // Final progress update
       setProcessingProgress(prev => {
@@ -1297,14 +849,13 @@ Respond with only the title, description, and keywords in the specified format.`
         console.log('📈 Final API Key Usage Statistics:')
         console.log(`⏱️ Total generation time: ${totalTimeFormatted}`)
         Object.entries(prev.processingStats).forEach(([keyId, stats]) => {
-          const keyName = validApiKeys.find(k => k.id === keyId)?.name || keyId
-          console.log(`  ${keyName}: ${stats.processed} processed, ${stats.errors} errors`)
+          const apiKeyName = validApiKeys.find(k => k.id === keyId)?.name || keyId
+          console.log(`  ${apiKeyName}: ${stats.processed} processed, ${stats.errors} errors`)
         })
 
         return {
           ...prev,
-          currentFilename: null,
-          currentApiKeyId: null
+          completed: input.length // Mark all as completed
         }
       })
 
@@ -1332,7 +883,7 @@ Respond with only the title, description, and keywords in the specified format.`
       // Keep progress for a moment to show completion, then clear
       setTimeout(() => setProcessingProgress(null), 2000)
     }
-  }, [apiKeys, apiKey, isApiKeyValid, generateMetadataForSingleImage, metadataProvider, generateMetadataWithOpenAI, generateMetadataWithGroq, generateMetadataWithOpenRouter])
+  }, [apiKeys, apiKey, isApiKeyValid, generateMetadataForBatch, metadataProvider, generateMetadataWithOpenAI])
 
   // API key management functions
   const handleAddApiKey = useCallback((key: string, name?: string) => {
@@ -1844,3 +1395,4 @@ Return only the enhanced prompt, nothing else. Make it concise but highly detail
     </GeminiContext.Provider>
   )
 }
+

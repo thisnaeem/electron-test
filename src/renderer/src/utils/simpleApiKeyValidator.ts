@@ -37,7 +37,7 @@ export async function validateGeminiApiKey(apiKey: string): Promise<SimpleValida
     return { isValid: false, error: 'API key too short' }
   }
 
-  const modelsToTry = ['gemini-1.5-flash', 'gemini-2.0-flash-exp']
+  const modelsToTry = ['gemini-2.0-flash-lite', 'gemini-2.0-flash']
   
   for (const modelName of modelsToTry) {
     try {

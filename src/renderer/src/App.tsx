@@ -17,7 +17,6 @@ import { GeminiProvider } from './context/GeminiContext'
 import Sidebar from './components/Sidebar'
 import Settings from './pages/Settings'
 import Help from './pages/Help'
-import UpdateNotification from './components/UpdateNotification'
 import { ToastProvider } from './hooks/useToast'
 
 import { useAppSelector, useAppDispatch } from './store/hooks'
@@ -143,7 +142,6 @@ function AppContent(): React.JSX.Element {
         </div>
           } />
         </Routes>
-        <UpdateNotification />
       </div>
     </div>
   )

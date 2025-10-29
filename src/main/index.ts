@@ -2,7 +2,6 @@ import { app, shell, BrowserWindow, ipcMain, dialog, Notification } from 'electr
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 
-import electronUpdater, { type AppUpdater } from 'electron-updater'
 import electronLog from 'electron-log'
 import fs from 'fs'
 import path from 'path'
@@ -49,13 +48,6 @@ process.on('unhandledRejection', (reason, promise) => {
 })
 
 
-export function getAutoUpdater(): AppUpdater {
-  const { autoUpdater } = electronUpdater
-  return autoUpdater
-}
-
-// Configure auto-updater
-const autoUpdater = getAutoUpdater()
 let mainWindow: BrowserWindow | null = null
 
 // Create app data directory for storing image previews
@@ -68,89 +60,6 @@ if (!fs.existsSync(previewsDir)) {
 // License window variable
 let licenseWindow: BrowserWindow | null = null
 let isAuthenticated = false
-
-
-
-// Enable logging for debugging
-if (is.dev) {
-  autoUpdater.logger = electronLog
-  electronLog.transports.file.level = 'debug'
-  // Force dev update config for development testing
-  autoUpdater.forceDevUpdateConfig = true
-}
-
-// Auto-updater event handlers
-autoUpdater.on('checking-for-update', () => {
-  console.log('Checking for update...')
-  mainWindow?.webContents.send('update-status', { status: 'checking' })
-})
-
-autoUpdater.on('update-available', (info) => {
-  console.log('Update available:', info)
-  mainWindow?.webContents.send('update-status', {
-    status: 'available',
-    version: info.version,
-    releaseNotes: info.releaseNotes
-  })
-
-  dialog.showMessageBox({
-    type: 'info',
-    title: 'Update Available',
-    message: `Version ${info.version} is available. Downloading...`,
-    buttons: ['OK']
-  })
-})
-
-autoUpdater.on('update-not-available', (info) => {
-  console.log('Update not available:', info)
-  mainWindow?.webContents.send('update-status', {
-    status: 'not-available',
-    currentVersion: app.getVersion()
-  })
-})
-
-autoUpdater.on('error', (err) => {
-  console.error('Auto-updater error:', err)
-  mainWindow?.webContents.send('update-status', {
-    status: 'error',
-    error: err.message
-  })
-
-  dialog.showErrorBox('Update Error', `Error: ${err.message}`)
-})
-
-autoUpdater.on('download-progress', (progressObj) => {
-  console.log('Download progress:', progressObj)
-  mainWindow?.webContents.send('update-status', {
-    status: 'downloading',
-    percent: progressObj.percent,
-    bytesPerSecond: progressObj.bytesPerSecond,
-    transferred: progressObj.transferred,
-    total: progressObj.total
-  })
-})
-
-autoUpdater.on('update-downloaded', (info) => {
-  console.log('Update downloaded:', info)
-  mainWindow?.webContents.send('update-status', {
-    status: 'downloaded',
-    version: info.version,
-    releaseNotes: info.releaseNotes
-  })
-
-  dialog
-    .showMessageBox({
-      type: 'info',
-      title: 'Update Ready',
-      message: `Version ${info.version} has been downloaded. Restart the application to apply the update.`,
-      buttons: ['Restart', 'Later']
-    })
-    .then((result) => {
-      if (result.response === 0) {
-        autoUpdater.quitAndInstall()
-      }
-    })
-})
 
 
 
@@ -319,11 +228,11 @@ app.whenReady().then(async () => {
     console.log('App is ready, starting initialization...')
     
     // Set app user model id for windows
-    electronApp.setAppUserModelId('CSVGen Pro')
+    electronApp.setAppUserModelId('StockMeta AI')
 
     // Set app icon for taskbar
     if (process.platform === 'win32') {
-      app.setAppUserModelId('CSVGen Pro')
+      app.setAppUserModelId('StockMeta AI')
     }
 
     console.log('App user model ID set successfully')
@@ -342,19 +251,6 @@ app.whenReady().then(async () => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
-
-  // IPC handlers for auto-updater
-  ipcMain.handle('check-for-updates', () => {
-    return autoUpdater.checkForUpdates()
-  })
-
-  ipcMain.handle('download-update', () => {
-    return autoUpdater.downloadUpdate()
-  })
-
-  ipcMain.handle('quit-and-install', () => {
-    autoUpdater.quitAndInstall()
-  })
 
   ipcMain.handle('get-app-version', () => {
     return app.getVersion()
@@ -773,13 +669,6 @@ app.whenReady().then(async () => {
       dialog.showErrorBox('Startup Error', 'Failed to create application window. Please check the logs and try again.')
     }
   }
-
-
-
-  // Check for updates on app start (with a small delay to ensure window is ready)
-  setTimeout(() => {
-    autoUpdater.checkForUpdatesAndNotify()
-  }, 3000)
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

@@ -48,9 +48,9 @@ const Help = (): React.JSX.Element => {
   const renderGettingStartedContent = () => (
     <div className="space-y-8">
       <div>
-        <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Welcome to CSVGen Pro</h3>
+        <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Welcome to StockMeta AI</h3>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-          CSVGen Pro is your all-in-one AI-powered content generation and file processing tool. Get started with these simple steps.
+          StockMeta AI is your all-in-one AI-powered content generation and file processing tool. Get started with these simple steps.
         </p>
 
         <div className="space-y-6">
@@ -126,7 +126,7 @@ const Help = (): React.JSX.Element => {
       <div>
         <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Features Overview</h3>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-          Discover all the powerful features available in CSVGen Pro.
+          Discover all the powerful features available in StockMeta AI.
         </p>
 
         <div className="grid gap-6 md:grid-cols-2">
@@ -224,7 +224,7 @@ const Help = (): React.JSX.Element => {
       <div>
         <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Troubleshooting</h3>
         <p className="text-sm text-gray-600 dark:text-gray-300 mb-6">
-          Common issues and solutions to help you get the most out of CSVGen Pro.
+          Common issues and solutions to help you get the most out of StockMeta AI.
         </p>
 
         <div className="space-y-6">
@@ -323,7 +323,7 @@ const Help = (): React.JSX.Element => {
                   Problem: Files not uploading
                 </p>
                 <ul className="text-sm text-gray-600 dark:text-gray-300 ml-4 space-y-1">
-                  <li>• Check file size (max 50MB for images, 100MB for videos)</li>
+                  <li>• Check file size (max 50MB for images, 1GB for videos)</li>
                   <li>• Ensure file format is supported</li>
                   <li>• Try uploading fewer files at once</li>
                   <li>• Verify file isn't corrupted</li>
@@ -383,7 +383,7 @@ const Help = (): React.JSX.Element => {
               Send us an email for detailed technical support and inquiries.
             </p>
             <button
-              onClick={() => window.open('mailto:support@csvgen.com', '_blank')}
+              onClick={() => window.open('mailto:support@stockmeta.ai', '_blank')}
               className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors"
             >
               Send Email

@@ -3,4 +3,4 @@ owner: fabwaseem
 repo: electron-updater
 private: false
 releaseType: release
-updaterCacheDirName: csvgen-pro-updater
+updaterCacheDirName: stockmeta-ai-updater

@@ -65,7 +65,7 @@ export class CategorySelectionService {
 
     try {
       const genAI = new GoogleGenerativeAI(this.apiKey)
-      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
       // Create comprehensive prompt for category analysis
       const prompt = this.createCategoryAnalysisPrompt(filename, existingMetadata)
